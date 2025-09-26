@@ -1,1 +1,0 @@
-# Email ticket stub (placeholder)
