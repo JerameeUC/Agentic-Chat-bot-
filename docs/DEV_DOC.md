@@ -1,4 +1,4 @@
-<!-- /docs/DEV_DOC.md -->
+<!-- /docs/slides/DEV_DOC.md -->
 
 ## 3. Functional Requirements
 

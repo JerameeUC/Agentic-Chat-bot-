@@ -1,2 +1,2 @@
-# /docs/slides/design.md
+<!-- /docs/slides/results.md -->
 # Results\n\nChallenges, metrics, screenshots.\n
