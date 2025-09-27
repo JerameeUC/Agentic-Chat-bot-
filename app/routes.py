@@ -1,12 +1,12 @@
 # /app/routes.py — HTTP handlers
+# routes.py — HTTP handlers (root-level, no /app package)
 import json
 from aiohttp import web
-from botbuilder.core import TurnContext
 from botbuilder.schema import Activity
 
 # Prefer project logic if available
 try:
-    from logic import handle_text as _handle_text
+    from logic import handle_text as _handle_text  # user-defined
 except Exception:
     from skills import normalize, reverse_text, is_empty
     def _handle_text(user_text: str) -> str:

@@ -1,0 +1,2878 @@
+# Flattened code dump for: C:\Users\User\Agentic-Chat-bot-\n# Files included: 64\n\n\n================================================================================\nBEGIN FILE: agenticcore\__init__.py\n================================================================================\n\n# package
+\n================================================================================\nEND FILE: agenticcore\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: agenticcore\chatbot\__init__.py\n================================================================================\n\n# package
+\n================================================================================\nEND FILE: agenticcore\chatbot\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: agenticcore\chatbot\services.py\n================================================================================\n\n# /agenticcore/chatbot/services.py
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import dataclass
+from typing import Dict
+
+# Delegate sentiment to the unified provider layer
+# If you put providers_unified.py under agenticcore/chatbot/, change the import to:
+#   from agenticcore.chatbot.providers_unified import analyze_sentiment
+from agenticcore.providers_unified import analyze_sentiment
+from ..providers_unified import analyze_sentiment
+
+
+def _trim(s: str, max_len: int = 2000) -> str:
+    s = (s or "").strip()
+    return s if len(s) <= max_len else s[: max_len - 1] + "…"
+
+
+@dataclass(frozen=True)
+class SentimentResult:
+    label: str          # "positive" | "neutral" | "negative" | "mixed" | "unknown"
+    confidence: float   # 0.0 .. 1.0
+
+
+class ChatBot:
+    """
+    Minimal chatbot that uses provider-agnostic sentiment via providers_unified.
+    Public API:
+      - reply(text: str) -> Dict[str, object]
+      - capabilities() -> Dict[str, object]
+    """
+
+    def __init__(self, system_prompt: str = "You are a concise helper.") -> None:
+        self._system_prompt = _trim(system_prompt, 800)
+        # Expose which provider is intended/active (for diagnostics)
+        self._mode = os.getenv("AI_PROVIDER") or "auto"
+
+    def capabilities(self) -> Dict[str, object]:
+        """List what this bot can do."""
+        return {
+            "system": "chatbot",
+            "mode": self._mode,  # "auto" or a pinned provider (hf/azure/openai/cohere/deepai/offline)
+            "features": ["text-input", "sentiment-analysis", "help"],
+            "commands": {"help": "Describe capabilities and usage."},
+        }
+
+    def reply(self, text: str) -> Dict[str, object]:
+        """Produce a reply and sentiment for one user message."""
+        user = _trim(text)
+        if not user:
+            return self._make_response(
+                "I didn't catch that. Please provide some text.",
+                SentimentResult("unknown", 0.0),
+            )
+
+        if user.lower() in {"help", "/help"}:
+            return {"reply": self._format_help(), "capabilities": self.capabilities()}
+
+        s = analyze_sentiment(user)  # -> {"provider", "label", "score", ...}
+        sr = SentimentResult(label=str(s.get("label", "neutral")), confidence=float(s.get("score", 0.5)))
+        return self._make_response(self._compose(sr), sr)
+
+    # ---- internals ----
+
+    def _format_help(self) -> str:
+        caps = self.capabilities()
+        feats = ", ".join(caps["features"])
+        return f"I can analyze sentiment and respond concisely. Features: {feats}. Send any text or type 'help'."
+
+    @staticmethod
+    def _make_response(reply: str, s: SentimentResult) -> Dict[str, object]:
+        return {"reply": reply, "sentiment": s.label, "confidence": round(float(s.confidence), 2)}
+
+    @staticmethod
+    def _compose(s: SentimentResult) -> str:
+        if s.label == "positive":
+            return "Thanks for sharing. I detected a positive sentiment."
+        if s.label == "negative":
+            return "I hear your concern. I detected a negative sentiment."
+        if s.label == "neutral":
+            return "Noted. The sentiment appears neutral."
+        if s.label == "mixed":
+            return "Your message has mixed signals. Can you clarify?"
+        return "I could not determine the sentiment. Please rephrase."
+
+
+# Optional: local REPL for quick manual testing
+def _interactive_loop() -> None:
+    bot = ChatBot()
+    try:
+        while True:
+            msg = input("> ").strip()
+            if msg.lower() in {"exit", "quit"}:
+                break
+            print(json.dumps(bot.reply(msg), ensure_ascii=False))
+    except (EOFError, KeyboardInterrupt):
+        pass
+
+
+if __name__ == "__main__":
+    _interactive_loop()
+\n================================================================================\nEND FILE: agenticcore\chatbot\services.py\n================================================================================\n\n================================================================================\nBEGIN FILE: agenticcore\cli.py\n================================================================================\n\n# /agenticcore/cli.py
+"""
+agenticcore.cli
+Console entrypoints:
+  - agentic: send a message to ChatBot and print reply JSON
+  - repo-tree: print a filtered tree view (uses tree.txt if present)
+  - repo-flatten: flatten code listing to stdout (uses FLATTENED_CODE.txt if present)
+"""
+import argparse, json, sys, traceback
+from pathlib import Path
+from dotenv import load_dotenv
+import os
+
+# Load .env variables into os.environ (project root .env by default)
+load_dotenv()
+
+
+def cmd_agentic(argv=None):
+    # Lazy import so other commands don't require ChatBot to be importable
+    from agenticcore.chatbot.services import ChatBot
+    # We call analyze_sentiment only for 'status' to reveal the actual chosen provider
+    try:
+        from agenticcore.providers_unified import analyze_sentiment
+    except Exception:
+        analyze_sentiment = None  # still fine; we'll show mode only
+
+    p = argparse.ArgumentParser(prog="agentic", description="Chat with AgenticCore ChatBot")
+    p.add_argument("message", nargs="*", help="Message to send")
+    p.add_argument("--debug", action="store_true", help="Print debug info")
+    args = p.parse_args(argv)
+    msg = " ".join(args.message).strip() or "hello"
+
+    if args.debug:
+        print(f"DEBUG argv={sys.argv}", flush=True)
+        print(f"DEBUG raw message='{msg}'", flush=True)
+
+    bot = ChatBot()
+
+    # Special commands for testing / assignments
+        # Special commands for testing / assignments
+    if msg.lower() == "status":
+        import requests  # local import to avoid hard dep for other commands
+
+        # Try a lightweight provider probe via analyze_sentiment
+        provider = None
+        if analyze_sentiment is not None:
+            try:
+                probe = analyze_sentiment("status ping")
+                provider = (probe or {}).get("provider")
+            except Exception:
+                if args.debug:
+                    traceback.print_exc()
+
+        # Hugging Face whoami auth probe
+        tok = os.getenv("HF_API_KEY", "")
+        who = None
+        auth_ok = False
+        err = None
+        try:
+            if tok:
+                r = requests.get(
+                    "https://huggingface.co/api/whoami-v2",
+                    headers={"Authorization": f"Bearer {tok}"},
+                    timeout=15,
+                )
+                auth_ok = (r.status_code == 200)
+                who = r.json() if auth_ok else None
+                if not auth_ok:
+                    err = r.text  # e.g., {"error":"Invalid credentials in Authorization header"}
+            else:
+                err = "HF_API_KEY not set (load .env or export it)"
+        except Exception as e:
+            err = str(e)
+
+        # Extract fine-grained scopes for visibility
+        fg = (((who or {}).get("auth") or {}).get("accessToken") or {}).get("fineGrained") or {}
+        scoped = fg.get("scoped") or []
+        global_scopes = fg.get("global") or []
+
+        # ---- tiny inference ping (proves 'Make calls to Inference Providers') ----
+        infer_ok, infer_err = False, None
+        try:
+            if tok:
+                model = os.getenv(
+                    "HF_MODEL_SENTIMENT",
+                    "distilbert-base-uncased-finetuned-sst-2-english"
+                )
+                r2 = requests.post(
+                    f"https://api-inference.huggingface.co/models/{model}",
+                    headers={"Authorization": f"Bearer {tok}", "x-wait-for-model": "true"},
+                    json={"inputs": "ping"},
+                    timeout=int(os.getenv("HTTP_TIMEOUT", "60")),
+                )
+                infer_ok = (r2.status_code == 200)
+                if not infer_ok:
+                    infer_err = f"HTTP {r2.status_code}: {r2.text}"
+        except Exception as e:
+            infer_err = str(e)
+        # -------------------------------------------------------------------------
+
+        # Mask + length to verify what .env provided
+        mask = (tok[:3] + "..." + tok[-4:]) if tok else None
+        out = {
+            "provider": provider or "unknown",
+            "mode": getattr(bot, "_mode", "auto"),
+            "auth_ok": auth_ok,
+            "whoami": who,
+            "token_scopes": {            # <--- added
+                "global": global_scopes,
+                "scoped": scoped,
+            },
+            "inference_ok": infer_ok,
+            "inference_error": infer_err,
+            "env": {
+                "HF_API_KEY_len": len(tok) if tok else 0,
+                "HF_API_KEY_mask": mask,
+                "HF_MODEL_SENTIMENT": os.getenv("HF_MODEL_SENTIMENT"),
+                "HTTP_TIMEOUT": os.getenv("HTTP_TIMEOUT"),
+            },
+            "capabilities": bot.capabilities(),
+            "error": err,
+        }
+
+    elif msg.lower() == "help":
+        out = {"capabilities": bot.capabilities()}
+
+    else:
+        try:
+            out = bot.reply(msg)
+        except Exception as e:
+            if args.debug:
+                traceback.print_exc()
+            out = {"error": str(e), "message": msg}
+
+    if args.debug:
+        print(f"DEBUG out={out}", flush=True)
+
+    print(json.dumps(out, indent=2), flush=True)
+
+
+def cmd_repo_tree(argv=None):
+    p = argparse.ArgumentParser(prog="repo-tree", description="Print repo tree (from tree.txt if available)")
+    p.add_argument("--path", default="tree.txt", help="Path to precomputed tree file")
+    args = p.parse_args(argv)
+    path = Path(args.path)
+    if path.exists():
+        print(path.read_text(encoding="utf-8"), flush=True)
+    else:
+        print("(no tree.txt found)", flush=True)
+
+
+def cmd_repo_flatten(argv=None):
+    p = argparse.ArgumentParser(prog="repo-flatten", description="Print flattened code listing")
+    p.add_argument("--path", default="FLATTENED_CODE.txt", help="Path to pre-flattened code file")
+    args = p.parse_args(argv)
+    path = Path(args.path)
+    if path.exists():
+        print(path.read_text(encoding="utf-8"), flush=True)
+    else:
+        print("(no FLATTENED_CODE.txt found)", flush=True)
+
+
+def _dispatch():
+    # Allow: python -m agenticcore.cli <subcommand> [args...]
+    if len(sys.argv) <= 1:
+        print("Usage: python -m agenticcore.cli <agentic|repo-tree|repo-flatten> [args]", file=sys.stderr)
+        sys.exit(2)
+    cmd, argv = sys.argv[1], sys.argv[2:]
+    try:
+        if cmd == "agentic":
+            cmd_agentic(argv)
+        elif cmd == "repo-tree":
+            cmd_repo_tree(argv)
+        elif cmd == "repo-flatten":
+            cmd_repo_flatten(argv)
+        else:
+            print(f"Unknown subcommand: {cmd}", file=sys.stderr)
+            sys.exit(2)
+    except SystemExit:
+        raise
+    except Exception:
+        traceback.print_exc()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    _dispatch()
+\n================================================================================\nEND FILE: agenticcore\cli.py\n================================================================================\n\n================================================================================\nBEGIN FILE: agenticcore\providers_unified.py\n================================================================================\n\n# /agenticcore/providers_unified.py
+"""
+providers_unified.py
+Unified, switchable providers for sentiment + (optional) text generation.
+Selection order unless AI_PROVIDER is set:
+  HF -> AZURE -> OPENAI -> COHERE -> DEEPAI -> OFFLINE
+Env vars:
+  HF_API_KEY
+  MICROSOFT_AI_SERVICE_ENDPOINT, MICROSOFT_AI_API_KEY
+  OPENAI_API_KEY,  OPENAI_MODEL=gpt-3.5-turbo
+  COHERE_API_KEY,  COHERE_MODEL=command
+  DEEPAI_API_KEY
+  AI_PROVIDER = hf|azure|openai|cohere|deepai|offline
+  HTTP_TIMEOUT = 20
+"""
+from __future__ import annotations
+import os, json
+from typing import Dict, Any, Optional
+import requests
+
+TIMEOUT = float(os.getenv("HTTP_TIMEOUT", "20"))
+
+def _env(name: str, default: Optional[str] = None) -> Optional[str]:
+    v = os.getenv(name)
+    return v if (v is not None and str(v).strip() != "") else default
+
+def _pick_provider() -> str:
+    forced = _env("AI_PROVIDER")
+    if forced in {"hf", "azure", "openai", "cohere", "deepai", "offline"}:
+        return forced
+    if _env("HF_API_KEY"): return "hf"
+    if _env("MICROSOFT_AI_API_KEY") and _env("MICROSOFT_AI_SERVICE_ENDPOINT"): return "azure"
+    if _env("OPENAI_API_KEY"): return "openai"
+    if _env("COHERE_API_KEY"): return "cohere"
+    if _env("DEEPAI_API_KEY"): return "deepai"
+    return "offline"
+
+# ---------------------------
+# Sentiment
+# ---------------------------
+
+def analyze_sentiment(text: str) -> Dict[str, Any]:
+    provider = _pick_provider()
+    try:
+        if provider == "hf":     return _sentiment_hf(text)
+        if provider == "azure":  return _sentiment_azure(text)
+        if provider == "openai": return _sentiment_openai_prompt(text)
+        if provider == "cohere": return _sentiment_cohere_prompt(text)
+        if provider == "deepai": return _sentiment_deepai(text)
+        return _sentiment_offline(text)
+    except Exception as e:
+        return {"provider": provider, "label": "neutral", "score": 0.5, "error": str(e)}
+
+def _sentiment_offline(text: str) -> Dict[str, Any]:
+    t = (text or "").lower()
+    pos = any(w in t for w in ["love","great","good","awesome","fantastic","thank","excellent","amazing"])
+    neg = any(w in t for w in ["hate","bad","terrible","awful","worst","angry","horrible"])
+    label = "positive" if pos and not neg else "negative" if neg and not pos else "neutral"
+    score = 0.9 if label != "neutral" else 0.5
+    return {"provider": "offline", "label": label, "score": score}
+
+def _sentiment_hf(text: str) -> Dict[str, Any]:
+    """
+    Hugging Face Inference API for sentiment.
+    Uses canonical repo id and handles 404/401 and various payload shapes.
+    """
+    key = _env("HF_API_KEY")
+    if not key:
+        return _sentiment_offline(text)
+
+    # canonical repo id to avoid 404
+    model = _env("HF_MODEL_SENTIMENT", "distilbert/distilbert-base-uncased-finetuned-sst-2-english")
+    timeout = int(_env("HTTP_TIMEOUT", "30"))
+
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "x-wait-for-model": "true",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+    r = requests.post(
+        f"https://api-inference.huggingface.co/models/{model}",
+        headers=headers,
+        json={"inputs": text},
+        timeout=timeout,
+    )
+
+    if r.status_code != 200:
+        return {"provider": "hf", "label": "neutral", "score": 0.5, "error": f"HTTP {r.status_code}: {r.text[:500]}"}
+
+    try:
+        data = r.json()
+    except Exception as e:
+        return {"provider": "hf", "label": "neutral", "score": 0.5, "error": str(e)}
+
+    if isinstance(data, dict) and "error" in data:
+        return {"provider": "hf", "label": "neutral", "score": 0.5, "error": data["error"]}
+
+    # normalize list shape
+    arr = data[0] if isinstance(data, list) and data and isinstance(data[0], list) else (data if isinstance(data, list) else [])
+    if not (isinstance(arr, list) and arr):
+        return {"provider": "hf", "label": "neutral", "score": 0.5, "error": f"Unexpected payload: {data}"}
+
+    top = max(arr, key=lambda x: x.get("score", 0.0) if isinstance(x, dict) else 0.0)
+    raw = str(top.get("label", "")).upper()
+    score = float(top.get("score", 0.5))
+
+    mapping = {
+        "LABEL_0": "negative", "LABEL_1": "neutral", "LABEL_2": "positive",
+        "NEGATIVE": "negative", "NEUTRAL": "neutral", "POSITIVE": "positive",
+    }
+    label = mapping.get(raw, (raw.lower() or "neutral"))
+
+    neutral_floor = float(os.getenv("SENTIMENT_NEUTRAL_THRESHOLD", "0.65"))
+    if label in {"positive", "negative"} and score < neutral_floor:
+        label = "neutral"
+
+    return {"provider": "hf", "label": label, "score": score}
+
+def _sentiment_azure(text: str) -> Dict[str, Any]:
+    try:
+        from azure.core.credentials import AzureKeyCredential  # type: ignore
+        from azure.ai.textanalytics import TextAnalyticsClient  # type: ignore
+    except Exception:
+        return _sentiment_offline(text)
+    endpoint = _env("MICROSOFT_AI_SERVICE_ENDPOINT")
+    key = _env("MICROSOFT_AI_API_KEY")
+    if not (endpoint and key): return _sentiment_offline(text)
+    client = TextAnalyticsClient(endpoint=endpoint.strip(), credential=AzureKeyCredential(key.strip()))
+    resp = client.analyze_sentiment(documents=[text], show_opinion_mining=False)[0]
+    scores = {
+        "positive": float(getattr(resp.confidence_scores, "positive", 0.0) or 0.0),
+        "neutral":  float(getattr(resp.confidence_scores, "neutral",  0.0) or 0.0),
+        "negative": float(getattr(resp.confidence_scores, "negative", 0.0) or 0.0),
+    }
+    label = max(scores, key=scores.get)
+    return {"provider": "azure", "label": label, "score": scores[label]}
+
+def _sentiment_openai_prompt(text: str) -> Dict[str, Any]:
+    key = _env("OPENAI_API_KEY")
+    model = _env("OPENAI_MODEL", "gpt-3.5-turbo")
+    if not key: return _sentiment_offline(text)
+    url = "https://api.openai.com/v1/chat/completions"
+    prompt = f"Classify the sentiment of this text as positive, negative, or neutral. Reply JSON with keys label and score (0..1). Text: {text!r}"
+    r = requests.post(
+        url,
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        json={"model": model, "messages": [{"role": "user", "content": prompt}], "temperature": 0},
+        timeout=TIMEOUT,
+    )
+    r.raise_for_status()
+    content = r.json()["choices"][0]["message"]["content"]
+    try:
+        obj = json.loads(content)
+        label = str(obj.get("label", "neutral")).lower()
+        score = float(obj.get("score", 0.5))
+        return {"provider": "openai", "label": label, "score": score}
+    except Exception:
+        l = "positive" if "positive" in content.lower() else "negative" if "negative" in content.lower() else "neutral"
+        return {"provider": "openai", "label": l, "score": 0.5}
+
+def _sentiment_cohere_prompt(text: str) -> Dict[str, Any]:
+    key = _env("COHERE_API_KEY")
+    model = _env("COHERE_MODEL", "command")
+    if not key: return _sentiment_offline(text)
+    url = "https://api.cohere.ai/v1/generate"
+    prompt = f"Classify the sentiment (positive, negative, neutral) and return JSON with keys label and score (0..1). Text: {text!r}"
+    r = requests.post(
+        url,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Cohere-Version": "2022-12-06",
+        },
+        json={"model": model, "prompt": prompt, "max_tokens": 30, "temperature": 0},
+        timeout=TIMEOUT,
+    )
+    r.raise_for_status()
+    gen = (r.json().get("generations") or [{}])[0].get("text", "")
+    try:
+        obj = json.loads(gen)
+        label = str(obj.get("label", "neutral")).lower()
+        score = float(obj.get("score", 0.5))
+        return {"provider": "cohere", "label": label, "score": score}
+    except Exception:
+        l = "positive" if "positive" in gen.lower() else "negative" if "negative" in gen.lower() else "neutral"
+        return {"provider": "cohere", "label": l, "score": 0.5}
+
+def _sentiment_deepai(text: str) -> Dict[str, Any]:
+    key = _env("DEEPAI_API_KEY")
+    if not key: return _sentiment_offline(text)
+    url = "https://api.deepai.org/api/sentiment-analysis"
+    r = requests.post(url, headers={"api-key": key}, data={"text": text}, timeout=TIMEOUT)
+    r.raise_for_status()
+    data = r.json()
+    label = (data.get("output") or ["neutral"])[0].lower()
+    return {"provider": "deepai", "label": label, "score": 0.5 if label == "neutral" else 0.9}
+
+# ---------------------------
+# Text generation (optional)
+# ---------------------------
+
+def generate_text(prompt: str, max_tokens: int = 128) -> Dict[str, Any]:
+    provider = _pick_provider()
+    try:
+        if provider == "hf":     return _gen_hf(prompt, max_tokens)
+        if provider == "openai": return _gen_openai(prompt, max_tokens)
+        if provider == "cohere": return _gen_cohere(prompt, max_tokens)
+        if provider == "deepai": return _gen_deepai(prompt, max_tokens)
+        return {"provider": "offline", "text": f"(offline) {prompt[:160]}"}
+    except Exception as e:
+        return {"provider": provider, "text": f"(error) {str(e)}"}
+
+def _gen_hf(prompt: str, max_tokens: int) -> Dict[str, Any]:
+    key = _env("HF_API_KEY")
+    if not key: return {"provider": "offline", "text": f"(offline) {prompt[:160]}"}
+    model = _env("HF_MODEL_GENERATION", "tiiuae/falcon-7b-instruct")
+    r = requests.post(
+        f"https://api-inference.huggingface.co/models/{model}",
+        headers={"Authorization": f"Bearer {key}"},
+        json={"inputs": prompt, "parameters": {"max_new_tokens": max_tokens}},
+        timeout=TIMEOUT,
+    )
+    r.raise_for_status()
+    data = r.json()
+    if isinstance(data, list) and data and "generated_text" in data[0]:
+        return {"provider": "hf", "text": data[0]["generated_text"]}
+    return {"provider": "hf", "text": str(data)}
+
+def _gen_openai(prompt: str, max_tokens: int) -> Dict[str, Any]:
+    key = _env("OPENAI_API_KEY")
+    model = _env("OPENAI_MODEL", "gpt-3.5-turbo")
+    if not key: return {"provider": "offline", "text": f"(offline) {prompt[:160]}"}
+    url = "https://api.openai.com/v1/chat/completions"
+    r = requests.post(
+        url,
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        json={"model": model, "messages": [{"role": "user", "content": prompt}], "max_tokens": max_tokens},
+        timeout=TIMEOUT,
+    )
+    r.raise_for_status()
+    data = r.json()
+    text = data["choices"][0]["message"]["content"]
+    return {"provider": "openai", "text": text}
+
+def _gen_cohere(prompt: str, max_tokens: int) -> Dict[str, Any]:
+    key = _env("COHERE_API_KEY")
+    model = _env("COHERE_MODEL", "command")
+    if not key: return {"provider": "offline", "text": f"(offline) {prompt[:160]}"}
+    url = "https://api.cohere.ai/v1/generate"
+    r = requests.post(
+        url,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Cohere-Version": "2022-12-06",
+        },
+        json={"model": model, "prompt": prompt, "max_tokens": max_tokens},
+        timeout=TIMEOUT,
+    )
+    r.raise_for_status()
+    data = r.json()
+    text = data.get("generations", [{}])[0].get("text", "")
+    return {"provider": "cohere", "text": text}
+
+def _gen_deepai(prompt: str, max_tokens: int) -> Dict[str, Any]:
+    key = _env("DEEPAI_API_KEY")
+    if not key: return {"provider": "offline", "text": f"(offline) {prompt[:160]}"}
+    url = "https://api.deepai.org/api/text-generator"
+    r = requests.post(url, headers={"api-key": key}, data={"text": prompt}, timeout=TIMEOUT)
+    r.raise_for_status()
+    data = r.json()
+    return {"provider": "deepai", "text": data.get("output", "")}
+\n================================================================================\nEND FILE: agenticcore\providers_unified.py\n================================================================================\n\n================================================================================\nBEGIN FILE: agenticcore\web_agentic.py\n================================================================================\n\n# agenticcore/web_agentic.py
+from fastapi import FastAPI, Query
+from fastapi.responses import HTMLResponse
+from agenticcore.chatbot.services import ChatBot
+
+app = FastAPI(title="AgenticCore Web UI")
+
+# 1. Simple HTML form at /
+@app.get("/", response_class=HTMLResponse)
+def index():
+    return """
+    <form action="/agentic" method="get">
+        <input type="text" name="msg" placeholder="Type a message" style="width:300px">
+        <input type="submit" value="Send">
+    </form>
+    """
+
+# 2. Agentic endpoint
+@app.get("/agentic")
+def run_agentic(msg: str = Query(..., description="Message to send to ChatBot")):
+    bot = ChatBot()
+    return bot.reply(msg)
+\n================================================================================\nEND FILE: agenticcore\web_agentic.py\n================================================================================\n\n================================================================================\nBEGIN FILE: anon_bot\handler.py\n================================================================================\n\n# /anon_bot/handler.py
+
+def handle_turn(m,h,u): return (h or [])+[[m,'hi']]
+\n================================================================================\nEND FILE: anon_bot\handler.py\n================================================================================\n\n================================================================================\nBEGIN FILE: anon_bot\rules.py\n================================================================================\n\n# /anon_bot/rules.py
+\n================================================================================\nEND FILE: anon_bot\rules.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\app\app.py\n================================================================================\n\n#!/usr/bin/env python3
+# app/app.py — aiohttp + Bot Framework bootstrap
+
+import os, sys
+from aiohttp import web
+from pathlib import Path
+from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
+
+from app.routes import init_routes
+from bot import SimpleBot
+
+# Credentials
+APP_ID = os.environ.get("MicrosoftAppId") or None
+APP_PASSWORD = os.environ.get("MicrosoftAppPassword") or None
+
+adapter_settings = BotFrameworkAdapterSettings(APP_ID, APP_PASSWORD)
+adapter = BotFrameworkAdapter(adapter_settings)
+
+async def on_error(context: TurnContext, error: Exception):
+    print(f"[on_turn_error] {error}", file=sys.stderr, flush=True)
+    try:
+        await context.send_activity("Oops. Something went wrong!")
+    except Exception as send_err:
+        print(f"[on_turn_error][send_activity_failed] {send_err}", file=sys.stderr, flush=True)
+
+adapter.on_turn_error = on_error
+
+# Bot instance
+bot = SimpleBot()
+
+def create_app() -> web.Application:
+    app = web.Application()
+    init_routes(app, adapter, bot)
+
+    # Optional CORS
+    try:
+        import aiohttp_cors
+        cors = aiohttp_cors.setup(app, defaults={
+            "*": aiohttp_cors.ResourceOptions(
+                allow_credentials=True,
+                expose_headers="*",
+                allow_headers="*",
+                allow_methods=["GET","POST","OPTIONS"],
+            )
+        })
+        for route in list(app.router.routes()):
+            cors.add(route)
+    except Exception:
+        pass
+
+    # Static folder if present
+    static_dir = Path(__file__).parent / "static"
+    if static_dir.exists():
+        app.router.add_static("/static/", path=static_dir, show_index=True)
+    else:
+        print(f"[warn] static directory not found: {static_dir}", flush=True)
+
+    return app
+
+app = create_app()
+
+if __name__ == "__main__":
+    host = os.environ.get("HOST", "127.0.0.1")  # use 0.0.0.0 in containers
+    port = int(os.environ.get("PORT", 3978))
+    web.run_app(app, host=host, port=port)
+\n================================================================================\nEND FILE: app\app\app.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\app\routes.py\n================================================================================\n\n# app/routes.py — HTTP handlers
+import json
+from aiohttp import web
+from botbuilder.core import TurnContext
+from botbuilder.schema import Activity
+
+# Prefer project logic if available
+try:
+    from logic import handle_text as _handle_text
+except Exception:
+    from skills import normalize, reverse_text, is_empty
+    def _handle_text(user_text: str) -> str:
+        text = (user_text or "").strip()
+        if not text:
+            return "Please provide text."
+        cmd = normalize(text)
+        if cmd in {"help", "capabilities"}:
+            return "Try: reverse <text> | or just say anything"
+        if cmd.startswith("reverse "):
+            original = text.split(" ", 1)[1] if " " in text else ""
+            return reverse_text(original)
+        return f"You said: {text}"
+
+def init_routes(app: web.Application, adapter, bot) -> None:
+    async def messages(req: web.Request) -> web.Response:
+        ctype = (req.headers.get("Content-Type") or "").lower()
+        if "application/json" not in ctype:
+            return web.Response(status=415, text="Unsupported Media Type: expected application/json")
+        try:
+            body = await req.json()
+        except json.JSONDecodeError:
+            return web.Response(status=400, text="Invalid JSON body")
+
+        activity = Activity().deserialize(body)
+        auth_header = req.headers.get("Authorization")
+
+        invoke_response = await adapter.process_activity(activity, auth_header, bot.on_turn)
+        if invoke_response:
+            return web.json_response(data=invoke_response.body, status=invoke_response.status)
+        return web.Response(status=202, text="Accepted")
+
+    async def messages_get(_req: web.Request) -> web.Response:
+        return web.Response(
+            text="This endpoint only accepts POST (Bot Framework activities).",
+            content_type="text/plain",
+            status=405
+        )
+
+    async def home(_req: web.Request) -> web.Response:
+        return web.Response(
+            text="Bot is running. POST Bot Framework activities to /api/messages.",
+            content_type="text/plain"
+        )
+
+    async def healthz(_req: web.Request) -> web.Response:
+        return web.json_response({"status": "ok"})
+
+    async def plain_chat(req: web.Request) -> web.Response:
+        try:
+            payload = await req.json()
+        except Exception:
+            return web.json_response({"error": "Invalid JSON"}, status=400)
+        user_text = payload.get("text", "")
+        reply = _handle_text(user_text)
+        return web.json_response({"reply": reply})
+
+    # Wire routes
+    app.router.add_get("/", home)
+    app.router.add_get("/healthz", healthz)
+    app.router.add_get("/api/messages", messages_get)
+    app.router.add_post("/api/messages", messages)
+    app.router.add_post("/plain-chat", plain_chat)
+\n================================================================================\nEND FILE: app\app\routes.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\app.py\n================================================================================\n\n# /app/app.py
+#!/usr/bin/env python3
+# app.py — aiohttp + Bot Framework Echo bot
+
+import os
+import sys
+import json
+from logic import handle_text
+from aiohttp import web
+from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
+from botbuilder.schema import Activity
+import aiohttp_cors
+from pathlib import Path
+
+
+# -------------------------------------------------------------------
+# Your bot implementation
+# -------------------------------------------------------------------
+# Make sure this exists at packages/bots/echo_bot.py
+# from bots.echo_bot import EchoBot
+# Minimal inline fallback if you want to test quickly:
+class EchoBot:
+    async def on_turn(self, turn_context: TurnContext):
+        if turn_context.activity.type == "message":
+            text = (turn_context.activity.text or "").strip()
+            if not text:
+                await turn_context.send_activity("Input was empty. Type 'help' for usage.")
+                return
+
+            lower = text.lower()
+            if lower == "help":
+                await turn_context.send_activity("Try: echo <msg> | reverse: <msg> | capabilities")
+            elif lower == "capabilities":
+                await turn_context.send_activity("- echo\n- reverse\n- help\n- capabilities")
+            elif lower.startswith("reverse:"):
+                payload = text.split(":", 1)[1].strip()
+                await turn_context.send_activity(payload[::-1])
+            elif lower.startswith("echo "):
+                await turn_context.send_activity(text[5:])
+            else:
+                await turn_context.send_activity("Unsupported command. Type 'help' for examples.")
+        else:
+            await turn_context.send_activity(f"[{turn_context.activity.type}] event received.")
+
+# -------------------------------------------------------------------
+# Adapter / bot setup
+# -------------------------------------------------------------------
+APP_ID = os.environ.get("MicrosoftAppId") or None
+APP_PASSWORD = os.environ.get("MicrosoftAppPassword") or None
+
+adapter_settings = BotFrameworkAdapterSettings(APP_ID, APP_PASSWORD)
+adapter = BotFrameworkAdapter(adapter_settings)
+
+async def on_error(context: TurnContext, error: Exception):
+    print(f"[on_turn_error] {error}", file=sys.stderr, flush=True)
+    try:
+        await context.send_activity("Oops. Something went wrong!")
+    except Exception as send_err:
+        print(f"[on_turn_error][send_activity_failed] {send_err}", file=sys.stderr, flush=True)
+
+adapter.on_turn_error = on_error
+bot = EchoBot()
+
+# -------------------------------------------------------------------
+# HTTP handlers
+# -------------------------------------------------------------------
+async def messages(req: web.Request) -> web.Response:
+    # Content-Type can include charset; do a contains check
+    ctype = (req.headers.get("Content-Type") or "").lower()
+    if "application/json" not in ctype:
+        return web.Response(status=415, text="Unsupported Media Type: expected application/json")
+
+    try:
+        body = await req.json()
+    except json.JSONDecodeError:
+        return web.Response(status=400, text="Invalid JSON body")
+
+    activity = Activity().deserialize(body)
+    auth_header = req.headers.get("Authorization")
+
+    invoke_response = await adapter.process_activity(activity, auth_header, bot.on_turn)
+    if invoke_response:
+        # For invoke activities, adapter returns explicit status/body
+        return web.json_response(data=invoke_response.body, status=invoke_response.status)
+    # Acknowledge standard message activities
+    return web.Response(status=202, text="Accepted")
+
+async def home(_req: web.Request) -> web.Response:
+    return web.Response(
+        text="Bot is running. POST Bot Framework activities to /api/messages.",
+        content_type="text/plain"
+    )
+
+async def messages_get(_req: web.Request) -> web.Response:
+    return web.Response(
+        text="This endpoint only accepts POST (Bot Framework activities).",
+        content_type="text/plain",
+        status=405
+    )
+
+async def healthz(_req: web.Request) -> web.Response:
+    return web.json_response({"status": "ok"})
+
+async def plain_chat(req: web.Request) -> web.Response:
+    try:
+        payload = await req.json()
+    except Exception:
+        return web.json_response({"error": "Invalid JSON"}, status=400)
+    user_text = payload.get("text", "")
+    reply = handle_text(user_text)
+    return web.json_response({"reply": reply})
+
+# -------------------------------------------------------------------
+# App factory and entrypoint
+# -------------------------------------------------------------------
+from pathlib import Path
+
+def create_app() -> web.Application:
+    app = web.Application()
+    app.router.add_get("/", home)
+    app.router.add_get("/healthz", healthz)
+    app.router.add_get("/api/messages", messages_get)
+    app.router.add_post("/api/messages", messages)
+    app.router.add_post("/plain-chat", plain_chat)
+
+    static_dir = Path(__file__).parent / "static"
+    if static_dir.exists():
+        app.router.add_static("/static/", path=static_dir, show_index=True)
+    else:
+        print(f"[warn] static directory not found: {static_dir}", flush=True)
+
+    return app
+
+app = create_app()
+
+if __name__ == "__main__":
+    host = os.environ.get("HOST", "127.0.0.1")  # use 0.0.0.0 in containers
+    port = int(os.environ.get("PORT", 3978))
+    web.run_app(app, host=host, port=port)
+\n================================================================================\nEND FILE: app\app.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\assets\html\agenticcore_frontend.html\n================================================================================\n\n<!-- /app/assets/html/agenticcore_frontend.html -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AgenticCore Chatbot Frontend</title>
+  <style>
+    :root {
+      --bg: #0b0d12;
+      --panel: #0f172a;
+      --panel-2: #111827;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #60a5fa;
+      --border: #1f2940;
+      --danger: #ef4444;
+      --success: #22c55e;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); }
+    .wrap { max-width: 920px; margin: 32px auto; padding: 0 16px; }
+    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 16px; }
+    header h1 { font-size: 18px; margin: 0; letter-spacing: .3px; }
+    header .badge { font-size: 12px; opacity: .85; padding: 4px 8px; border:1px solid var(--border); border-radius: 999px; background: rgba(255,255,255,0.03); }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+    .row { display: flex; gap: 10px; align-items: center; }
+    .stack { display: grid; gap: 12px; }
+    label { font-size: 12px; color: var(--muted); }
+    input[type=text] { flex: 1; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); outline: none; }
+    input[type=text]::placeholder { color: #6b7280; }
+    button { padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border); background: #1f2937; color: var(--text); cursor: pointer; transition: transform .02s ease, background .2s; }
+    button:hover { background: #273449; }
+    button:active { transform: translateY(1px); }
+    .btn-primary { background: #1f2937; border-color: #31405a; }
+    .btn-ghost { background: transparent; border-color: var(--border); }
+    .grid { display: grid; gap: 12px; }
+    .grid-2 { grid-template-columns: 1fr 1fr; }
+    .log { margin-top: 16px; display: grid; gap: 10px; }
+    .bubble { max-width: 80%; padding: 12px 14px; border-radius: 14px; line-height: 1.35; }
+    .user { background: #1e293b; border:1px solid #2b3b55; margin-left: auto; border-bottom-right-radius: 4px; }
+    .bot  { background: #0d1b2a; border:1px solid #223049; margin-right: auto; border-bottom-left-radius: 4px; }
+    .meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+    .status { display:flex; align-items:center; gap:8px; font-size: 12px; color: var(--muted); }
+    .dot { width:8px; height:8px; border-radius:999px; background: #64748b; display:inline-block; }
+    .dot.ok { background: var(--success); }
+    .dot.bad { background: var(--danger); }
+    footer { margin: 24px 0; text-align:center; color: var(--muted); font-size: 12px; }
+    .small { font-size: 12px; }
+    @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>AgenticCore Chatbot Frontend</h1>
+      <div class="badge">Frontend → FastAPI → providers_unified</div>
+    </header>
+
+    <section class="card stack">
+      <div class="grid grid-2">
+        <div class="stack">
+          <label for="backend">Backend URL</label>
+          <div class="row">
+            <input id="backend" type="text" placeholder="http://127.0.0.1:8000" />
+            <button id="save" class="btn-ghost">Save</button>
+          </div>
+          <div class="status" id="status"><span class="dot"></span><span>Not checked</span></div>
+        </div>
+        <div class="stack">
+          <label for="message">Message</label>
+          <div class="row">
+            <input id="message" type="text" placeholder="Type a message…" />
+            <button id="send" class="btn-primary">Send</button>
+          </div>
+          <div class="row">
+            <button id="cap" class="btn-ghost small">Capabilities</button>
+            <button id="health" class="btn-ghost small">Health</button>
+            <button id="clear" class="btn-ghost small">Clear</button>
+          </div>
+        </div>
+      </div>
+      <div class="log" id="log"></div>
+    </section>
+
+    <footer>
+      Use with your FastAPI backend at <code>/chatbot/message</code>. Configure CORS if you serve this file from a different origin.
+    </footer>
+  </div>
+
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+    const backendInput = $('#backend');
+    const sendBtn = $('#send');
+    const saveBtn = $('#save');
+    const msgInput = $('#message');
+    const capBtn = $('#cap');
+    const healthBtn = $('#health');
+    const clearBtn = $('#clear');
+    const log = $('#log');
+    const status = $('#status');
+    const dot = status.querySelector('.dot');
+    const statusText = status.querySelector('span:last-child');
+
+    function getBackendUrl() {
+      return localStorage.getItem('BACKEND_URL') || 'http://127.0.0.1:8000';
+    }
+    function setBackendUrl(v) {
+      localStorage.setItem('BACKEND_URL', v);
+    }
+    function cardUser(text) {
+      const div = document.createElement('div');
+      div.className = 'bubble user';
+      div.textContent = text;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+    function cardBot(obj) {
+      const wrap = document.createElement('div');
+      wrap.className = 'bubble bot';
+      const pre = document.createElement('pre');
+      pre.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+      wrap.appendChild(pre);
+      log.appendChild(wrap);
+      log.scrollTop = log.scrollHeight;
+    }
+    function setStatus(ok, text) {
+      dot.classList.toggle('ok', !!ok);
+      dot.classList.toggle('bad', ok === false);
+      statusText.textContent = text || (ok ? 'OK' : 'Error');
+    }
+    async function api(path, init) {
+      const base = backendInput.value.trim().replace(/\/$/, '');
+      const url = base + path;
+      const resp = await fetch(url, init);
+      if (!resp.ok) {
+        let t = await resp.text().catch(() => '');
+        throw new Error(`HTTP ${resp.status} ${resp.statusText} — ${t}`);
+      }
+      const contentType = resp.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) return resp.json();
+      return resp.text();
+    }
+
+    async function checkHealth() {
+      try {
+        const h = await api('/health', { method: 'GET' });
+        setStatus(true, 'Healthy');
+        cardBot({ health: h });
+      } catch (e) {
+        setStatus(false, String(e.message || e));
+        cardBot({ error: String(e.message || e) });
+      }
+    }
+
+    async function sendMessage() {
+      const text = msgInput.value.trim();
+      if (!text) return;
+      cardUser(text);
+      msgInput.value = '';
+      try {
+        const data = await api('/chatbot/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text })
+        });
+        cardBot(data);
+      } catch (e) {
+        cardBot({ error: String(e.message || e) });
+      }
+    }
+
+    async function showCapabilities() {
+      try {
+        // Prefer API if available; if 404, fall back to library-like prompt.
+        const data = await api('/chatbot/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: 'help' })
+        });
+        cardBot(data);
+      } catch (e) {
+        cardBot({ capabilities: ['text-input','sentiment-analysis','help'], note: 'API help failed, showing defaults', error: String(e.message || e) });
+      }
+    }
+
+    // Wire up
+    backendInput.value = getBackendUrl();
+    saveBtn.onclick = () => { setBackendUrl(backendInput.value.trim()); setStatus(null, 'Saved'); };
+    sendBtn.onclick = sendMessage;
+    msgInput.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') sendMessage(); });
+    capBtn.onclick = showCapabilities;
+    healthBtn.onclick = checkHealth;
+    clearBtn.onclick = () => { log.innerHTML = ''; setStatus(null, 'Idle'); };
+
+    // Initial health ping
+    checkHealth();
+  </script>
+</body>
+</html>
+\n================================================================================\nEND FILE: app\assets\html\agenticcore_frontend.html\n================================================================================\n\n================================================================================\nBEGIN FILE: app\assets\html\chat.html\n================================================================================\n\n<!-- /app/assets/html/chat.html -->
+<!doctype html>
+<html><head><meta charset="utf-8"/><title>Simple Chat</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+:root { --bg:#f6f7f9; --card:#fff; --me:#dff1ff; --bot:#ffffff; --text:#23262b; --muted:#8a9099; }
+body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; background:var(--bg); color:var(--text); }
+.app { max-width:840px; margin:24px auto; padding:0 16px; }
+.card { background:var(--card); border:1px solid #e3e6ea; border-radius:14px; box-shadow:0 1px 2px rgba(0,0,0,.04); overflow:hidden; }
+.header { padding:14px 16px; border-bottom:1px solid #e9edf2; font-weight:600; }
+.chat { height:480px; overflow:auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
+.row { display:flex; }
+.row.me { justify-content:flex-end; }
+.bubble { max-width:70%; padding:10px 12px; border-radius:12px; line-height:1.35; white-space:pre-wrap; }
+.me .bubble { background:var(--me); border:1px solid #c3e5ff; }
+.bot .bubble { background:var(--bot); border:1px solid #e5e8ec; }
+.footer { display:flex; gap:8px; padding:12px; border-top:1px solid #e9edf2; }
+input[type=text] { flex:1; padding:10px 12px; border-radius:10px; border:1px solid #d5dbe3; font-size:15px; }
+button { padding:10px 14px; border-radius:10px; border:1px solid #2b6cb0; background:#2b6cb0; color:#fff; font-weight:600; cursor:pointer; }
+button:disabled { opacity:.6; cursor:not-allowed; }
+.hint { color:var(--muted); font-size:12px; padding:0 16px 12px; }
+</style></head>
+<body>
+<div class="app"><div class="card">
+  <div class="header">Traditional Chatbot (Local)</div>
+  <div id="chat" class="chat"></div>
+  <div class="hint">Try: <code>reverse: hello world</code>, <code>help</code>, <code>capabilities</code></div>
+  <div class="footer">
+    <input id="msg" type="text" placeholder="Type a message..." autofocus />
+    <button id="send">Send</button>
+  </div>
+</div></div>
+<script>
+const API = "http://127.0.0.1:3978/plain-chat";
+const chat = document.getElementById("chat");
+const input = document.getElementById("msg");
+const sendBtn = document.getElementById("send");
+function addBubble(text, who) {
+  const row = document.createElement("div"); row.className = "row " + who;
+  const wrap = document.createElement("div"); wrap.className = who === "me" ? "me" : "bot";
+  const b = document.createElement("div"); b.className = "bubble"; b.textContent = text;
+  wrap.appendChild(b); row.appendChild(wrap); chat.appendChild(row); chat.scrollTop = chat.scrollHeight;
+}
+async function send() {
+  const text = input.value.trim(); if (!text) return; input.value = ""; addBubble(text, "me"); sendBtn.disabled = true;
+  try {
+    const res = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json(); addBubble(data.reply ?? "(no reply)", "bot");
+  } catch (err) { addBubble("Error: " + err.message, "bot"); }
+  finally { sendBtn.disabled = false; input.focus(); }
+}
+sendBtn.addEventListener("click", send);
+input.addEventListener("keydown", (e)=>{ if (e.key === "Enter") send(); });
+addBubble("Connected to local bot at /plain-chat", "bot");
+</script>
+</body></html>
+\n================================================================================\nEND FILE: app\assets\html\chat.html\n================================================================================\n\n================================================================================\nBEGIN FILE: app\assets\html\chat_console.html\n================================================================================\n\n<!-- /app/assets/html/chat_console.html -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Console Chat Tester</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body{ font-family: ui-sans-serif, system-ui, Arial; margin:20px; }
+    .row{ display:flex; gap:8px; align-items:center; margin:6px 0; }
+    input[type=text]{ flex:1; padding:8px; }
+    button{ padding:8px 10px; }
+    pre{ background:#0b1020; color:#d6e7ff; padding:10px; height:320px; overflow:auto; }
+    .chip{ display:inline-block; padding:3px 8px; background:#eef; border-radius:12px; margin-left:8px; }
+  </style>
+</head>
+<body>
+<h2>AgenticCore Console</h2>
+
+<div class="row">
+  <label>Backend</label>
+  <input id="base" type="text" value="http://127.0.0.1:8000" />
+  <button id="btnHealth">Health</button>
+  <button id="btnRoutes">Routes</button>
+</div>
+
+<div class="row">
+  <input id="msg" type="text" placeholder="Say something…" />
+  <button id="btnSend">POST /chatbot/message</button>
+</div>
+
+<div>
+  <span>Mode:</span>
+  <span id="mode" class="chip">API</span>
+</div>
+
+<pre id="out"></pre>
+
+<script>
+const $ = id => document.getElementById(id);
+const out = $("out");
+function print(o){ out.textContent += (typeof o==="string" ? o : JSON.stringify(o,null,2)) + "\n"; out.scrollTop = out.scrollHeight; }
+function join(b, p){ return b.replace(/\/+$/,"") + p; }
+
+async function health(){
+  try{
+    const r = await fetch(join($("base").value, "/health"));
+    print(await r.json());
+  }catch(e){ print("health error: " + e); }
+}
+async function routes(){
+  try{
+    const r = await fetch(join($("base").value, "/openapi.json"));
+    const j = await r.json();
+    print({ routes: Object.keys(j.paths) });
+  }catch(e){ print("routes error: " + e); }
+}
+async function send(){
+  const text = $("msg").value.trim();
+  if(!text){ print("enter a message first"); return; }
+  try{
+    const r = await fetch(join($("base").value, "/chatbot/message"), {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ message: text })
+    });
+    print(await r.json());
+  }catch(e){ print("send error: " + e); }
+}
+$("btnHealth").onclick = health;
+$("btnRoutes").onclick = routes;
+$("btnSend").onclick = send;
+
+// boot
+health();
+</script>
+</body>
+</html>
+\n================================================================================\nEND FILE: app\assets\html\chat_console.html\n================================================================================\n\n================================================================================\nBEGIN FILE: app\assets\html\chat_minimal.html\n================================================================================\n\n<!-- /app/assets/html/chat_minimal.html -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Minimal Chat Tester</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 24px; }
+    .row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+    input[type=text]{ width:420px; padding:8px; }
+    textarea{ width:100%; height:240px; padding:8px; }
+    button{ padding:8px 12px; }
+    .ok{ color:#1a7f37; }
+    .warn{ color:#b54708; }
+    .err{ color:#b42318; }
+  </style>
+</head>
+<body>
+<h2>Minimal Chat Tester → FastAPI /chatbot/message</h2>
+
+<div class="row">
+  <label>Backend URL:</label>
+  <input id="base" type="text" value="http://127.0.0.1:8000" />
+  <button id="btnHealth">Health</button>
+  <button id="btnCaps">Capabilities</button>
+</div>
+
+<div class="row">
+  <input id="msg" type="text" placeholder="Type a message…" />
+  <button id="btnSend">Send</button>
+</div>
+
+<p id="status"></p>
+<textarea id="log" readonly></textarea>
+
+<script>
+const $ = id => document.getElementById(id);
+const log = (o, cls="") => {
+  const line = (typeof o === "string") ? o : JSON.stringify(o, null, 2);
+  $("log").value += line + "\n";
+  $("log").scrollTop = $("log").scrollHeight;
+  if(cls) { $("status").className = cls; $("status").textContent = line; }
+};
+
+function urlJoin(base, path) {
+  return base.replace(/\/+$/,"") + path;
+}
+
+async function health() {
+  try {
+    const r = await fetch(urlJoin($("base").value, "/health"));
+    const j = await r.json();
+    log(j, "ok");
+  } catch (e) { log("Health error: " + e, "err"); }
+}
+
+async function caps() {
+  try {
+    // Prefer library-like caps endpoint if you expose one; otherwise call /openapi.json for visibility
+    const r = await fetch(urlJoin($("base").value, "/openapi.json"));
+    const j = await r.json();
+    log({paths: Object.keys(j.paths).slice(0,20)}, "ok");
+  } catch (e) { log("Caps error: " + e, "err"); }
+}
+
+async function sendMsg() {
+  const text = $("msg").value.trim();
+  if(!text) { log("Please type a message.", "warn"); return; }
+  try {
+    const r = await fetch(urlJoin($("base").value, "/chatbot/message"), {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ message: text })
+    });
+    if(!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+    const j = await r.json();
+    log(j, "ok");
+  } catch (e) { log("Send error: " + e, "err"); }
+}
+
+$("btnHealth").onclick = health;
+$("btnCaps").onclick = caps;
+$("btnSend").onclick = sendMsg;
+
+// Warmup
+health();
+</script>
+</body>
+</html>
+\n================================================================================\nEND FILE: app\assets\html\chat_minimal.html\n================================================================================\n\n================================================================================\nBEGIN FILE: app\mbf_bot\__init__.py\n================================================================================\n\n\n================================================================================\nEND FILE: app\mbf_bot\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\mbf_bot\bot.py\n================================================================================\n\n# /app/bot.py
+"""
+Simple MBF bot:
+- 'help' / 'capabilities' shows features
+- 'reverse <text>' returns reversed text
+- otherwise delegates to AgenticCore ChatBot (sentiment) if available
+"""
+
+from typing import List, Optional, Dict, Any
+from botbuilder.core import ActivityHandler, TurnContext
+from botbuilder.schema import ChannelAccount, ActivityTypes
+
+from skills import normalize, reverse_text, capabilities, is_empty
+
+# Try to import AgenticCore; if unavailable, provide a tiny fallback.
+try:
+    from agenticcore.chatbot.services import ChatBot  # real provider-backed bot
+except Exception:
+    class ChatBot:  # fallback shim for offline/dev
+        def reply(self, message: str) -> Dict[str, Any]:
+            return {
+                "reply": "Noted. (local fallback reply)",
+                "sentiment": "neutral",
+                "confidence": 0.5,
+            }
+
+def _format_sentiment(res: Dict[str, Any]) -> str:
+    """Compose a user-facing string from ChatBot reply payload."""
+    reply = (res.get("reply") or "").strip()
+    label: Optional[str] = res.get("sentiment")
+    conf = res.get("confidence")
+    if label is not None and conf is not None:
+        return f"{reply} (sentiment: {label}, confidence: {float(conf):.2f})"
+    return reply or "I'm not sure what to say."
+
+def _help_text() -> str:
+    """Single source of truth for the help/capability text."""
+    feats = "\n".join(f"- {c}" for c in capabilities())
+    return (
+        "I can reverse text and provide concise replies with sentiment.\n"
+        "Commands:\n"
+        "- help | capabilities\n"
+        "- reverse <text>\n"
+        "General text will be handled by the ChatBot service.\n\n"
+        f"My capabilities:\n{feats}"
+    )
+
+class SimpleBot(ActivityHandler):
+    """Minimal ActivityHandler with local commands + ChatBot fallback."""
+
+    def __init__(self, chatbot: Optional[ChatBot] = None):
+        self._chatbot = chatbot or ChatBot()
+
+    async def on_members_added_activity(
+        self, members_added: List[ChannelAccount], turn_context: TurnContext
+    ):
+        for member in members_added:
+            if member.id != turn_context.activity.recipient.id:
+                await turn_context.send_activity("Hello! Type 'help' to see what I can do.")
+
+    async def on_message_activity(self, turn_context: TurnContext):
+        if turn_context.activity.type != ActivityTypes.message:
+            return
+
+        text = (turn_context.activity.text or "").strip()
+        if is_empty(text):
+            await turn_context.send_activity("Please enter a message (try 'help').")
+            return
+
+        cmd = normalize(text)
+
+        if cmd in {"help", "capabilities"}:
+            await turn_context.send_activity(_help_text())
+            return
+
+        if cmd.startswith("reverse "):
+            original = text.split(" ", 1)[1] if " " in text else ""
+            await turn_context.send_activity(reverse_text(original))
+            return
+
+        # ChatBot fallback (provider-agnostic sentiment/reply)
+        try:
+            result = self._chatbot.reply(text)
+            await turn_context.send_activity(_format_sentiment(result))
+        except Exception:
+            await turn_context.send_activity(f"You said: {text}")
+\n================================================================================\nEND FILE: app\mbf_bot\bot.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\mbf_bot\skills.py\n================================================================================\n\n# /app/skills.py
+"""
+Small, dependency-free helpers used by the MBF SimpleBot.
+"""
+
+from typing import List
+
+_CAPS: List[str] = [
+    "echo-reverse",          # reverse <text>
+    "help",                  # help / capabilities
+    "chatbot-sentiment",     # delegate to ChatBot() if available
+]
+
+def normalize(text: str) -> str:
+    """Normalize user text for lightweight command routing."""
+    return (text or "").strip().lower()
+
+def reverse_text(text: str) -> str:
+    """Return the input string reversed."""
+    return (text or "")[::-1]
+
+def capabilities() -> List[str]:
+    """Return a stable list of bot capabilities."""
+    return list(_CAPS)
+
+def is_empty(text: str) -> bool:
+    """True if message is blank after trimming."""
+    return len((text or "").strip()) == 0
+\n================================================================================\nEND FILE: app\mbf_bot\skills.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\routes.py\n================================================================================\n\n# /app/routes.py — HTTP handlers
+import json
+from aiohttp import web
+from botbuilder.core import TurnContext
+from botbuilder.schema import Activity
+
+# Prefer project logic if available
+try:
+    from logic import handle_text as _handle_text
+except Exception:
+    from skills import normalize, reverse_text, is_empty
+    def _handle_text(user_text: str) -> str:
+        text = (user_text or "").strip()
+        if not text:
+            return "Please provide text."
+        cmd = normalize(text)
+        if cmd in {"help", "capabilities"}:
+            return "Try: reverse <text> | or just say anything"
+        if cmd.startswith("reverse "):
+            original = text.split(" ", 1)[1] if " " in text else ""
+            return reverse_text(original)
+        return f"You said: {text}"
+
+def init_routes(app: web.Application, adapter, bot) -> None:
+    async def messages(req: web.Request) -> web.Response:
+        ctype = (req.headers.get("Content-Type") or "").lower()
+        if "application/json" not in ctype:
+            return web.Response(status=415, text="Unsupported Media Type: expected application/json")
+        try:
+            body = await req.json()
+        except json.JSONDecodeError:
+            return web.Response(status=400, text="Invalid JSON body")
+
+        activity = Activity().deserialize(body)
+        auth_header = req.headers.get("Authorization")
+
+        invoke_response = await adapter.process_activity(activity, auth_header, bot.on_turn)
+        if invoke_response:
+            return web.json_response(data=invoke_response.body, status=invoke_response.status)
+        return web.Response(status=202, text="Accepted")
+
+    async def messages_get(_req: web.Request) -> web.Response:
+        return web.Response(
+            text="This endpoint only accepts POST (Bot Framework activities).",
+            content_type="text/plain",
+            status=405
+        )
+
+    async def home(_req: web.Request) -> web.Response:
+        return web.Response(
+            text="Bot is running. POST Bot Framework activities to /api/messages.",
+            content_type="text/plain"
+        )
+
+    async def healthz(_req: web.Request) -> web.Response:
+        return web.json_response({"status": "ok"})
+
+    async def plain_chat(req: web.Request) -> web.Response:
+        try:
+            payload = await req.json()
+        except Exception:
+            return web.json_response({"error": "Invalid JSON"}, status=400)
+        user_text = payload.get("text", "")
+        reply = _handle_text(user_text)
+        return web.json_response({"reply": reply})
+
+    # Wire routes
+    app.router.add_get("/", home)
+    app.router.add_get("/healthz", healthz)
+    app.router.add_get("/api/messages", messages_get)
+    app.router.add_post("/api/messages", messages)
+    app.router.add_post("/plain-chat", plain_chat)
+\n================================================================================\nEND FILE: app\routes.py\n================================================================================\n\n================================================================================\nBEGIN FILE: core\config.py\n================================================================================\n\n# /core/config.py
+from __future__ import annotations
+import os
+from dataclasses import dataclass, field
+from typing import List, Optional
+
+
+def _as_bool(v: Optional[str], default: bool = False) -> bool:
+    if v is None:
+        return default
+    return v.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+def _as_int(v: Optional[str], default: int) -> int:
+    try:
+        return int(v) if v is not None else default
+    except ValueError:
+        return default
+
+def _as_list(v: Optional[str], default: List[str] | None = None) -> List[str]:
+    if not v:
+        return list(default or [])
+    return [item.strip() for item in v.split(",") if item.strip()]
+
+
+@dataclass(slots=True)
+class Settings:
+    # Runtime / environment
+    env: str = field(default_factory=lambda: os.getenv("ENV", "dev"))
+    debug: bool = field(default_factory=lambda: _as_bool(os.getenv("DEBUG"), False))
+
+    # Host/port
+    host: str = field(default_factory=lambda: os.getenv("HOST", "127.0.0.1"))
+    port: int = field(default_factory=lambda: _as_int(os.getenv("PORT"), 3978))
+
+    # Logging
+    log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
+    json_logs: bool = field(default_factory=lambda: _as_bool(os.getenv("JSON_LOGS"), False))
+
+    # CORS
+    cors_allow_origins: List[str] = field(
+        default_factory=lambda: _as_list(os.getenv("CORS_ALLOW_ORIGINS"), ["*"])
+    )
+    cors_allow_methods: List[str] = field(
+        default_factory=lambda: _as_list(os.getenv("CORS_ALLOW_METHODS"), ["GET", "POST", "OPTIONS"])
+    )
+    cors_allow_headers: List[str] = field(
+        default_factory=lambda: _as_list(os.getenv("CORS_ALLOW_HEADERS"), ["*"])
+    )
+
+    # Bot Framework credentials
+    microsoft_app_id: Optional[str] = field(default_factory=lambda: os.getenv("MicrosoftAppId"))
+    microsoft_app_password: Optional[str] = field(default_factory=lambda: os.getenv("MicrosoftAppPassword"))
+
+    def to_dict(self) -> dict:
+        return {
+            "env": self.env,
+            "debug": self.debug,
+            "host": self.host,
+            "port": self.port,
+            "log_level": self.log_level,
+            "json_logs": self.json_logs,
+            "cors_allow_origins": self.cors_allow_origins,
+            "cors_allow_methods": self.cors_allow_methods,
+            "cors_allow_headers": self.cors_allow_headers,
+            "microsoft_app_id": bool(self.microsoft_app_id),
+            "microsoft_app_password": bool(self.microsoft_app_password),
+        }
+
+
+# singleton-style settings object
+settings = Settings()
+\n================================================================================\nEND FILE: core\config.py\n================================================================================\n\n================================================================================\nBEGIN FILE: core\logging.py\n================================================================================\n\n# /core/logging.py
+from __future__ import annotations
+import json
+import logging
+import sys
+from datetime import datetime
+from typing import Optional
+
+try:
+    # Optional: human-friendly console colors if installed
+    import colorama  # type: ignore
+    colorama.init()
+    _HAS_COLOR = True
+except Exception:  # pragma: no cover
+    _HAS_COLOR = False
+
+# Very small JSON formatter (avoids extra deps)
+class JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:  # type: ignore[override]
+        payload = {
+            "ts": datetime.utcfromtimestamp(record.created).isoformat(timespec="milliseconds") + "Z",
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        if record.exc_info:
+            payload["exc_info"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False)
+
+class ConsoleFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:  # type: ignore[override]
+        ts = datetime.utcfromtimestamp(record.created).strftime("%H:%M:%S")
+        lvl = record.levelname
+        name = record.name
+        msg = record.getMessage()
+
+        if _HAS_COLOR:
+            COLORS = {
+                "DEBUG": "\033[37m",
+                "INFO": "\033[36m",
+                "WARNING": "\033[33m",
+                "ERROR": "\033[31m",
+                "CRITICAL": "\033[41m",
+            }
+            RESET = "\033[0m"
+            color = COLORS.get(lvl, "")
+            return f"{ts} {color}{lvl:<8}{RESET} {name}: {msg}"
+        return f"{ts} {lvl:<8} {name}: {msg}"
+
+
+_initialized = False
+
+def setup_logging(level: str = "INFO", json_logs: bool = False) -> None:
+    """
+    Initialize root logger once.
+    """
+    global _initialized
+    if _initialized:
+        return
+    _initialized = True
+
+    root = logging.getLogger()
+    root.setLevel(level.upper())
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(JsonFormatter() if json_logs else ConsoleFormatter())
+    root.handlers[:] = [handler]
+
+
+def get_logger(name: Optional[str] = None) -> logging.Logger:
+    """
+    Get a logger (call setup_logging() first to configure formatting).
+    """
+    return logging.getLogger(name or "app")
+\n================================================================================\nEND FILE: core\logging.py\n================================================================================\n\n================================================================================\nBEGIN FILE: core\types.py\n================================================================================\n\n# /core/types.py
+from __future__ import annotations
+from dataclasses import dataclass, field, asdict
+from typing import Any, Dict, List, Literal, Optional, Tuple, TypedDict
+
+Role = Literal["system", "user", "assistant"]
+
+# Basic chat message
+@dataclass(slots=True)
+class ChatMessage:
+    role: Role
+    content: str
+
+# Pair-based history (simple UI / anon_bot style)
+ChatTurn = List[str]                # [user, bot]
+ChatHistory = List[ChatTurn]        # [[u,b], [u,b], ...]
+
+# Plain chat API payloads (/plain-chat)
+@dataclass(slots=True)
+class PlainChatRequest:
+    text: str
+
+@dataclass(slots=True)
+class PlainChatResponse:
+    reply: str
+    meta: Optional[Dict[str, Any]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+# Optional error shape for consistent JSON error responses
+class ErrorPayload(TypedDict, total=False):
+    error: str
+    detail: str
+\n================================================================================\nEND FILE: core\types.py\n================================================================================\n\n================================================================================\nBEGIN FILE: docs\architecture.md\n================================================================================\n\n<!-- /docs/slides/architecture.md -->
+# Architecture\n\nShort explainer tied to the flowchart.\n\n================================================================================\nEND FILE: docs\architecture.md\n================================================================================\n\n================================================================================\nBEGIN FILE: docs\design.md\n================================================================================\n\n<!-- /docs/slides/design.md -->
+# Design notes\n\nAPI notes, security, tradeoffs.\n
+\n================================================================================\nEND FILE: docs\design.md\n================================================================================\n\n================================================================================\nBEGIN FILE: docs\DEV_DOC.md\n================================================================================\n\n<!-- /docs/slides/DEV_DOC.md -->
+
+## 3. Functional Requirements
+
+This section describes the functional requirements for connecting a chatbot to an AI-as-a-Service (AIaaS) platform. It defines the expected system behavior, outlines constraints, and sets measurable acceptance criteria. Requirements are grouped into system context, core functions, supporting functions, and non-functional aspects.
+
+---
+
+### 3.1 System Context
+
+The chatbot acts as the client application. It receives user input, processes it, and communicates with an external AIaaS endpoint (e.g., Azure AI Language Service). The AI service provides natural language processing (NLP) features such as sentiment analysis. The chatbot then interprets the service output and responds back to the user.
+
+Key components include:
+- **User Interface (UI):** Chat interface for entering text.
+- **Chatbot Core:** Handles request routing and conversation logic.
+- **AI Service Connector:** Manages authentication and API calls to the AI service.
+- **AIaaS Platform:** External cloud service providing NLP functions.
+
+---
+
+### 3.2 Functional Requirements
+
+#### FR-1: User Input Handling
+- The chatbot shall accept text input from users.
+- The chatbot shall sanitize input to remove unsafe characters.
+- The chatbot shall log all interactions for debugging and testing.
+
+#### FR-2: API Connection
+- The system shall authenticate with the AI service using API keys stored securely in environment variables.
+- The chatbot shall send user text to the AIaaS endpoint in the required format.
+- The chatbot shall handle and parse responses from the AIaaS.
+
+#### FR-3: Sentiment Analysis Integration
+- The chatbot shall use the AIaaS to determine the sentiment (e.g., positive, neutral, negative) of user input.
+- The chatbot shall present sentiment results as part of its response or use them to adjust tone.
+
+#### FR-4: Error and Exception Handling
+- The system shall detect failed API calls and return a fallback message to the user.
+- The chatbot shall notify the user if the AI service is unavailable.
+- The chatbot shall log errors with timestamp and cause.
+
+#### FR-5: Reporting and Documentation
+- The chatbot shall provide a list of supported commands or features when prompted.
+- The chatbot shall record system status and output for inclusion in the project report.
+- The development process shall be documented with screenshots and configuration notes.
+
+---
+
+### 3.3 Non-Functional Requirements
+
+#### NFR-1: Security
+- API keys shall not be hard-coded in source files.
+- Sensitive data shall be retrieved from environment variables or secure vaults.
+
+#### NFR-2: Performance
+- The chatbot shall return responses within 2 seconds under normal network conditions.
+- The system shall process at least 20 concurrent user sessions without performance degradation.
+
+#### NFR-3: Reliability
+- The chatbot shall achieve at least 95% uptime during testing.
+- The chatbot shall gracefully degrade to local responses if the AI service is unavailable.
+
+#### NFR-4: Usability
+- The chatbot shall provide clear, user-friendly error messages.
+- The chatbot shall handle malformed input without crashing.
+
+---
+
+### 3.4 Acceptance Criteria
+
+1. **Input Handling**
+   - Given valid text input, the chatbot processes it without errors.
+   - Given invalid or malformed input, the chatbot responds with a clarification request.
+
+2. **API Connection**
+   - Given a valid API key and endpoint, the chatbot connects and retrieves sentiment analysis.
+   - Given an invalid API key, the chatbot logs an error and informs the user.
+
+3. **Sentiment Analysis**
+   - Given a positive statement, the chatbot labels it correctly with at least 90% accuracy.
+   - Given a negative statement, the chatbot labels it correctly with at least 90% accuracy.
+
+4. **Error Handling**
+   - When the AI service is unavailable, the chatbot informs the user and continues functioning with local responses.
+   - All failures are recorded in a log file.
+
+5. **Usability**
+   - The chatbot returns responses in less than 2 seconds for 95% of requests.
+   - The chatbot displays a list of features when the user requests “help.”
+
+---
+
+### Glossary
+
+- **AIaaS (AI-as-a-Service):** Cloud-based artificial intelligence services accessible via APIs.
+- **API (Application Programming Interface):** A set of rules for software applications to communicate with each other.
+- **NLP (Natural Language Processing):** A field of AI focused on enabling computers to understand human language.
+- **Sentiment Analysis:** An NLP technique that determines the emotional tone behind a text.
+
+\n================================================================================\nEND FILE: docs\DEV_DOC.md\n================================================================================\n\n================================================================================\nBEGIN FILE: docs\results.md\n================================================================================\n\n<!-- /docs/slides/results.md -->
+# Results\n\nChallenges, metrics, screenshots.\n\n================================================================================\nEND FILE: docs\results.md\n================================================================================\n\n================================================================================\nBEGIN FILE: examples\example.py\n================================================================================\n\n# /example/example.py
+"""Simple CLI example that sends a message to the ChatBot and prints the JSON reply."""
+import json
+from agenticcore.chatbot.services import ChatBot
+
+if __name__ == "__main__":
+    bot = ChatBot()
+    result = bot.reply("hello world")
+    print(json.dumps(result, indent=2))
+\n================================================================================\nEND FILE: examples\example.py\n================================================================================\n\n================================================================================\nBEGIN FILE: flat_tree_filter.py\n================================================================================\n\n#!/usr/bin/env python3
+# flatten_anytree.py — Flatten a folder tree (code/config) into one text file.
+# Usage:
+#   python flatten_anytree.py [ROOT_DIR] [OUTPUT_FILE]
+# Examples:
+#   python flatten_anytree.py C:\path\to\repo FLATTENED_CODE.txt
+#   python flatten_anytree.py . out.txt --include-exts .py,.ipynb --exclude-dirs .git,node_modules
+#
+# New in this patched version:
+#   - Skips common .gitignore-style junk by default (node_modules, .venv, __pycache__, caches, etc.).
+#   - Skips noisy/secret files like .env, .env.*, *.log, *.tmp, *.pyc by default.
+#   - Adds CLI flags: --exclude-dirs, --exclude-files, --exclude-globs to extend ignores.
+#   - Removes ".env" from default INCLUDE_EXTS for safety (you can still include via flags).
+#
+import json
+import os
+import sys
+import fnmatch
+from pathlib import Path
+from typing import Iterable, Set, List
+
+INCLUDE_EXTS: Set[str] = {
+    ".py", ".ipynb", ".json", ".md", ".txt", ".yml", ".yaml",
+    ".ini", ".cfg", ".conf", ".service", ".sh", ".bat",
+    ".js", ".ts", ".tsx", ".jsx", ".css", ".html",
+    ".toml", ".dockerfile"
+}
+
+EXCLUDE_DIRS: Set[str] = {
+    ".git", ".hg", ".svn", "__pycache__", "node_modules",
+    ".venv", "venv", "env", "dist", "build",
+    "artifacts", "logs", ".idea", ".vscode", ".pytest_cache",
+    ".mypy_cache", ".ruff_cache", ".tox", ".nox", ".hypothesis",
+    ".cache", ".gradle", ".parcel-cache", ".next", ".turbo",
+    ".pnpm-store", ".yarn", ".yarn/cache", ".nuxt", ".svelte-kit"
+}
+
+# Filenames to always skip
+EXCLUDE_FILES: Set[str] = {
+    ".DS_Store", "Thumbs.db", ".coverage", ".python-version",
+}
+
+# Glob patterns to skip (gitignore-like, simple fnmatch on the basename)
+EXCLUDE_GLOBS: List[str] = [
+    "*.log", "*.tmp", "*.temp", "*.bak", "*.swp", "*.swo",
+    "*.pyc", "*.pyo", "*.pyd", "*.class",
+    "*.lock", "*.pid",
+    "*.egg-info", "*.eggs",
+    "*.sqlite", "*.sqlite3", "*.db", "*.pkl",
+    ".env", ".env.*",
+]
+
+MAX_FILE_BYTES_DEFAULT = 2_000_000  # 2 MB safety default
+
+
+def is_included_file(path: Path, include_exts: Set[str]) -> bool:
+    if not path.is_file():
+        return False
+    # Dockerfile special-case: no suffix
+    if path.name.lower() == "dockerfile":
+        return True
+    return path.suffix.lower() in include_exts
+
+
+def read_ipynb_code_cells(nb_path: Path) -> str:
+    try:
+        data = json.loads(nb_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return f"[ERROR reading notebook JSON: {e}]"
+    cells = data.get("cells", [])
+    out_lines: List[str] = []
+    count = 0
+    for c in cells:
+        if c.get("cell_type") == "code":
+            count += 1
+            src = c.get("source", [])
+            code = "".join(src)
+            out_lines.append(f"# %% [code cell {count}]")
+            out_lines.append(code.rstrip() + "\\n")
+    if not out_lines:
+        return "[No code cells found]"
+    return "\\n".join(out_lines)
+
+
+def read_text_file(path: Path) -> str:
+    try:
+        if path.suffix.lower() == ".ipynb":
+            return read_ipynb_code_cells(path)
+        return path.read_text(encoding="utf-8", errors="replace")
+    except Exception as e:
+        return f"[ERROR reading file: {e}]"
+
+
+def walk_files(root: Path,
+               exclude_dirs: Set[str],
+               include_exts: Set[str],
+               max_bytes: int,
+               follow_symlinks: bool,
+               exclude_files: Set[str],
+               exclude_globs: List[str]) -> Iterable[Path]:
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=follow_symlinks):
+        # prune excluded dirs in-place
+        dirnames[:] = [d for d in dirnames if d not in exclude_dirs]
+        for name in filenames:
+            # filename-level filters
+            if name in exclude_files:
+                continue
+            if any(fnmatch.fnmatch(name, pat) for pat in exclude_globs):
+                continue
+
+            p = Path(dirpath) / name
+            if is_included_file(p, include_exts):
+                try:
+                    if p.stat().st_size <= max_bytes:
+                        yield p
+                except Exception:
+                    continue
+
+
+def parse_str_set_arg(raw: str, default: Set[str]) -> Set[str]:
+    # Parse comma-separated items into a set of strings (filenames or dirnames).
+    if raw is None or not str(raw).strip():
+        return set(default)
+    return {s.strip() for s in raw.split(",") if s.strip()}
+
+
+def parse_list_arg(raw: str, default: Set[str]) -> Set[str]:
+    # Parse comma-separated items; empty -> default. Example: ".py,.ipynb,.md"
+    if raw is None or not str(raw).strip():
+        return set(default)
+    items = [s.strip() for s in raw.split(",") if s.strip()]
+    # normalize extensions to lowercase with a leading dot when applicable
+    norm: Set[str] = set()
+    for it in items:
+        it_low = it.lower()
+        if it_low == "dockerfile":
+            norm.add("dockerfile")  # handled specially
+        elif it_low.startswith("."):
+            norm.add(it_low)
+        else:
+            norm.add("." + it_low)
+    return norm
+
+
+def main(argv: List[str]) -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(
+        description="Flatten a folder tree (code/config) into one text file with file headers."
+    )
+    ap.add_argument("root", nargs="?", default=".", help="Root directory to scan (default: current dir)")
+    ap.add_argument("out", nargs="?", default="FLATTENED_CODE.txt", help="Output text file (default: FLATTENED_CODE.txt)")
+    ap.add_argument("--include-exts", dest="include_exts", default="",
+                    help="Comma-separated list of extensions to include (e.g. .py,.ipynb,.md). Default uses a sane preset.")
+    ap.add_argument("--exclude-dirs", dest="exclude_dirs", default="",
+                    help="Comma-separated list of directory names to exclude (in addition to defaults).")
+    ap.add_argument("--exclude-files", dest="exclude_files", default="",
+                    help="Comma-separated list of filenames to exclude (in addition to defaults).")
+    ap.add_argument("--exclude-globs", dest="exclude_globs", default="",
+                    help="Comma-separated list of glob patterns to exclude (e.g. *.log,*.tmp,.env, .env.*).")
+    ap.add_argument("--max-bytes", dest="max_bytes", type=int, default=MAX_FILE_BYTES_DEFAULT,
+                    help=f"Skip files larger than this many bytes (default: {MAX_FILE_BYTES_DEFAULT}).")
+    ap.add_argument("--follow-symlinks", action="store_true", help="Follow symlinks while walking the tree.")
+    args = ap.parse_args(argv)
+
+    root = Path(args.root).expanduser()
+    out_path = Path(args.out).expanduser()
+
+    if not root.exists():
+        print(f"Root path not found: {root}", file=sys.stderr)
+        return 1
+
+    include_exts = parse_list_arg(args.include_exts, INCLUDE_EXTS)
+
+    exclude_dirs = set(EXCLUDE_DIRS)
+    if args.exclude_dirs:
+        exclude_dirs |= {d.strip() for d in args.exclude_dirs.split(",") if d.strip()}
+
+    exclude_files = set(EXCLUDE_FILES)
+    if args.exclude_files:
+        exclude_files |= {f.strip() for f in args.exclude_files.split(",") if f.strip()}
+
+    exclude_globs = list(EXCLUDE_GLOBS)
+    if args.exclude_globs:
+        exclude_globs += [g.strip() for g in args.exclude_globs.split(",") if g.strip()]
+
+    files = sorted(
+        walk_files(root, exclude_dirs, include_exts, args.max_bytes, args.follow_symlinks, exclude_files, exclude_globs)
+    )
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", encoding="utf-8") as out:
+        out.write(f"# Flattened code dump for: {root.resolve()}\\n")
+        out.write(f"# Files included: {len(files)}\\n\\n")
+        for p in files:
+            try:
+                rel = p.relative_to(root)
+            except Exception:
+                rel = p
+            out.write("\\n" + "=" * 80 + "\\n")
+            out.write(f"BEGIN FILE: {rel}\\n")
+            out.write("=" * 80 + "\\n\\n")
+            out.write(read_text_file(p))
+            out.write("\\n" + "=" * 80 + "\\n")
+            out.write(f"END FILE: {rel}\\n")
+            out.write("=" * 80 + "\\n")
+
+    print(f"Wrote: {out_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
+\n================================================================================\nEND FILE: flat_tree_filter.py\n================================================================================\n\n================================================================================\nBEGIN FILE: guardrails\pii_redaction.py\n================================================================================\n\n# /guardrails/pii_redaction.py
+
+def redact(t): return t
+\n================================================================================\nEND FILE: guardrails\pii_redaction.py\n================================================================================\n\n================================================================================\nBEGIN FILE: guardrails\safety.py\n================================================================================\n\n# /guardrails/safety.py\n================================================================================\nEND FILE: guardrails\safety.py\n================================================================================\n\n================================================================================\nBEGIN FILE: integrations\azure\bot_framework.py\n================================================================================\n\n# /intergrations/azure/bot_framework.py
+# Azure Bot Framework (placeholder)
+\n================================================================================\nEND FILE: integrations\azure\bot_framework.py\n================================================================================\n\n================================================================================\nBEGIN FILE: integrations\botframework\app.py\n================================================================================\n\n# /intergrations/botframework/app.py — aiohttp + Bot Framework Echo bot
+#!/usr/bin/env python3
+
+import os
+import sys
+import json
+from logic import handle_text
+from aiohttp import web
+from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
+from botbuilder.schema import Activity
+import aiohttp_cors
+from pathlib import Path
+
+
+# -------------------------------------------------------------------
+# Your bot implementation
+# -------------------------------------------------------------------
+# Make sure this exists at packages/bots/echo_bot.py
+# from bots.echo_bot import EchoBot
+# Minimal inline fallback if you want to test quickly:
+class EchoBot:
+    async def on_turn(self, turn_context: TurnContext):
+        if turn_context.activity.type == "message":
+            text = (turn_context.activity.text or "").strip()
+            if not text:
+                await turn_context.send_activity("Input was empty. Type 'help' for usage.")
+                return
+
+            lower = text.lower()
+            if lower == "help":
+                await turn_context.send_activity("Try: echo <msg> | reverse: <msg> | capabilities")
+            elif lower == "capabilities":
+                await turn_context.send_activity("- echo\n- reverse\n- help\n- capabilities")
+            elif lower.startswith("reverse:"):
+                payload = text.split(":", 1)[1].strip()
+                await turn_context.send_activity(payload[::-1])
+            elif lower.startswith("echo "):
+                await turn_context.send_activity(text[5:])
+            else:
+                await turn_context.send_activity("Unsupported command. Type 'help' for examples.")
+        else:
+            await turn_context.send_activity(f"[{turn_context.activity.type}] event received.")
+
+# -------------------------------------------------------------------
+# Adapter / bot setup
+# -------------------------------------------------------------------
+APP_ID = os.environ.get("MicrosoftAppId") or None
+APP_PASSWORD = os.environ.get("MicrosoftAppPassword") or None
+
+adapter_settings = BotFrameworkAdapterSettings(APP_ID, APP_PASSWORD)
+adapter = BotFrameworkAdapter(adapter_settings)
+
+async def on_error(context: TurnContext, error: Exception):
+    print(f"[on_turn_error] {error}", file=sys.stderr, flush=True)
+    try:
+        await context.send_activity("Oops. Something went wrong!")
+    except Exception as send_err:
+        print(f"[on_turn_error][send_activity_failed] {send_err}", file=sys.stderr, flush=True)
+
+adapter.on_turn_error = on_error
+bot = EchoBot()
+
+# -------------------------------------------------------------------
+# HTTP handlers
+# -------------------------------------------------------------------
+async def messages(req: web.Request) -> web.Response:
+    # Content-Type can include charset; do a contains check
+    ctype = (req.headers.get("Content-Type") or "").lower()
+    if "application/json" not in ctype:
+        return web.Response(status=415, text="Unsupported Media Type: expected application/json")
+
+    try:
+        body = await req.json()
+    except json.JSONDecodeError:
+        return web.Response(status=400, text="Invalid JSON body")
+
+    activity = Activity().deserialize(body)
+    auth_header = req.headers.get("Authorization")
+
+    invoke_response = await adapter.process_activity(activity, auth_header, bot.on_turn)
+    if invoke_response:
+        # For invoke activities, adapter returns explicit status/body
+        return web.json_response(data=invoke_response.body, status=invoke_response.status)
+    # Acknowledge standard message activities
+    return web.Response(status=202, text="Accepted")
+
+async def home(_req: web.Request) -> web.Response:
+    return web.Response(
+        text="Bot is running. POST Bot Framework activities to /api/messages.",
+        content_type="text/plain"
+    )
+
+async def messages_get(_req: web.Request) -> web.Response:
+    return web.Response(
+        text="This endpoint only accepts POST (Bot Framework activities).",
+        content_type="text/plain",
+        status=405
+    )
+
+async def healthz(_req: web.Request) -> web.Response:
+    return web.json_response({"status": "ok"})
+
+async def plain_chat(req: web.Request) -> web.Response:
+    try:
+        payload = await req.json()
+    except Exception:
+        return web.json_response({"error": "Invalid JSON"}, status=400)
+    user_text = payload.get("text", "")
+    reply = handle_text(user_text)
+    return web.json_response({"reply": reply})
+
+# -------------------------------------------------------------------
+# App factory and entrypoint
+# -------------------------------------------------------------------
+from pathlib import Path
+
+def create_app() -> web.Application:
+    app = web.Application()
+    app.router.add_get("/", home)
+    app.router.add_get("/healthz", healthz)
+    app.router.add_get("/api/messages", messages_get)
+    app.router.add_post("/api/messages", messages)
+    app.router.add_post("/plain-chat", plain_chat)
+
+    static_dir = Path(__file__).parent / "static"
+    if static_dir.exists():
+        app.router.add_static("/static/", path=static_dir, show_index=True)
+    else:
+        print(f"[warn] static directory not found: {static_dir}", flush=True)
+
+    return app
+
+app = create_app()
+
+if __name__ == "__main__":
+    host = os.environ.get("HOST", "127.0.0.1")  # use 0.0.0.0 in containers
+    port = int(os.environ.get("PORT", 3978))
+    web.run_app(app, host=host, port=port)
+\n================================================================================\nEND FILE: integrations\botframework\app.py\n================================================================================\n\n================================================================================\nBEGIN FILE: integrations\botframework\bot.py\n================================================================================\n\n# /intergrations/botframework/bot.py
+"""
+Simple MBF bot:
+- 'help' / 'capabilities' shows features
+- 'reverse <text>' returns reversed text
+- otherwise delegates to AgenticCore ChatBot (sentiment) if available
+"""
+
+from typing import List, Optional, Dict, Any
+from botbuilder.core import ActivityHandler, TurnContext
+from botbuilder.schema import ChannelAccount, ActivityTypes
+
+from skills import normalize, reverse_text, capabilities, is_empty
+
+# Try to import AgenticCore; if unavailable, provide a tiny fallback.
+try:
+    from agenticcore.chatbot.services import ChatBot  # real provider-backed bot
+except Exception:
+    class ChatBot:  # fallback shim for offline/dev
+        def reply(self, message: str) -> Dict[str, Any]:
+            return {
+                "reply": "Noted. (local fallback reply)",
+                "sentiment": "neutral",
+                "confidence": 0.5,
+            }
+
+def _format_sentiment(res: Dict[str, Any]) -> str:
+    """Compose a user-facing string from ChatBot reply payload."""
+    reply = (res.get("reply") or "").strip()
+    label: Optional[str] = res.get("sentiment")
+    conf = res.get("confidence")
+    if label is not None and conf is not None:
+        return f"{reply} (sentiment: {label}, confidence: {float(conf):.2f})"
+    return reply or "I'm not sure what to say."
+
+def _help_text() -> str:
+    """Single source of truth for the help/capability text."""
+    feats = "\n".join(f"- {c}" for c in capabilities())
+    return (
+        "I can reverse text and provide concise replies with sentiment.\n"
+        "Commands:\n"
+        "- help | capabilities\n"
+        "- reverse <text>\n"
+        "General text will be handled by the ChatBot service.\n\n"
+        f"My capabilities:\n{feats}"
+    )
+
+class SimpleBot(ActivityHandler):
+    """Minimal ActivityHandler with local commands + ChatBot fallback."""
+
+    def __init__(self, chatbot: Optional[ChatBot] = None):
+        self._chatbot = chatbot or ChatBot()
+
+    async def on_members_added_activity(
+        self, members_added: List[ChannelAccount], turn_context: TurnContext
+    ):
+        for member in members_added:
+            if member.id != turn_context.activity.recipient.id:
+                await turn_context.send_activity("Hello! Type 'help' to see what I can do.")
+
+    async def on_message_activity(self, turn_context: TurnContext):
+        if turn_context.activity.type != ActivityTypes.message:
+            return
+
+        text = (turn_context.activity.text or "").strip()
+        if is_empty(text):
+            await turn_context.send_activity("Please enter a message (try 'help').")
+            return
+
+        cmd = normalize(text)
+
+        if cmd in {"help", "capabilities"}:
+            await turn_context.send_activity(_help_text())
+            return
+
+        if cmd.startswith("reverse "):
+            original = text.split(" ", 1)[1] if " " in text else ""
+            await turn_context.send_activity(reverse_text(original))
+            return
+
+        # ChatBot fallback (provider-agnostic sentiment/reply)
+        try:
+            result = self._chatbot.reply(text)
+            await turn_context.send_activity(_format_sentiment(result))
+        except Exception:
+            await turn_context.send_activity(f"You said: {text}")
+\n================================================================================\nEND FILE: integrations\botframework\bot.py\n================================================================================\n\n================================================================================\nBEGIN FILE: integrations\botframework\bots\echo_bot.py\n================================================================================\n\n# bots/echo_bot.py
+from botbuilder.core import ActivityHandler, TurnContext
+from botbuilder.schema import ChannelAccount
+
+def simple_sentiment(text: str):
+    """
+    Tiny, no-cost heuristic so you can demo behavior without extra services.
+    You can swap this later for HF/OpenAI/Azure easily.
+    """
+    t = (text or "").lower()
+    pos = any(w in t for w in ["love","great","good","awesome","fantastic","excellent","amazing"])
+    neg = any(w in t for w in ["hate","bad","terrible","awful","worst","horrible","angry"])
+    if pos and not neg:  return "positive", 0.9
+    if neg and not pos:  return "negative", 0.9
+    return "neutral", 0.5
+
+CAPS = [
+    "Echo what you say (baseline).",
+    "Show my capabilities with 'help' or 'capabilities'.",
+    "Handle malformed/empty input politely.",
+    "Classify simple sentiment (positive/negative/neutral).",
+]
+
+class EchoBot(ActivityHandler):
+    async def on_members_added_activity(
+        self, members_added: [ChannelAccount], turn_context: TurnContext
+    ):
+        for member in members_added:
+            if member.id != turn_context.activity.recipient.id:
+                await turn_context.send_activity(
+                    "Hi! I’m your sample bot.\n"
+                    "- Try typing: **help**\n"
+                    "- Or any sentence and I’ll echo it + sentiment."
+                )
+
+    async def on_message_activity(self, turn_context: TurnContext):
+        text = (turn_context.activity.text or "").strip()
+
+        # Handle empty/malformed
+        if not text:
+            await turn_context.send_activity(
+                "I didn’t catch anything. Please type a message (or 'help')."
+            )
+            return
+
+        # Capabilities
+        if text.lower() in {"help","capabilities","what can you do"}:
+            caps = "\n".join(f"• {c}" for c in CAPS)
+            await turn_context.send_activity(
+                "Here’s what I can do:\n" + caps
+            )
+            return
+
+        # Normal message → echo + sentiment
+        label, score = simple_sentiment(text)
+        reply = f"You said: **{text}**\nSentiment: **{label}** (conf {score:.2f})"
+        await turn_context.send_activity(reply)
+\n================================================================================\nEND FILE: integrations\botframework\bots\echo_bot.py\n================================================================================\n\n================================================================================\nBEGIN FILE: integrations\email\ticket_stub.py\n================================================================================\n\n# /intergrations/email/ticket_stub.py
+# Email ticket stub (placeholder)
+\n================================================================================\nEND FILE: integrations\email\ticket_stub.py\n================================================================================\n\n================================================================================\nBEGIN FILE: integrations\web\fastapi\web_agentic.py\n================================================================================\n\n# /integrations/web/fastapi/web_agentic.py
+from fastapi import FastAPI, Query
+from fastapi.responses import HTMLResponse
+from agenticcore.chatbot.services import ChatBot
+
+app = FastAPI(title="AgenticCore Web UI")
+
+# 1. Simple HTML form at /
+@app.get("/", response_class=HTMLResponse)
+def index():
+    return """
+    <form action="/agentic" method="get">
+        <input type="text" name="msg" placeholder="Type a message" style="width:300px">
+        <input type="submit" value="Send">
+    </form>
+    """
+
+# 2. Agentic endpoint
+@app.get("/agentic")
+def run_agentic(msg: str = Query(..., description="Message to send to ChatBot")):
+    bot = ChatBot()
+    return bot.reply(msg)
+\n================================================================================\nEND FILE: integrations\web\fastapi\web_agentic.py\n================================================================================\n\n================================================================================\nBEGIN FILE: logged_in_bot\handler.py\n================================================================================\n\n# /logged_in_bot/handler.py
+
+from agenticcore.chatbot.services import ChatBot
+
+_bot = ChatBot()
+
+def handle_turn(message, history, user):
+    history = history or []
+    try:
+        res = _bot.reply(message)
+        reply = res.get("reply") or "Noted."
+        label = res.get("sentiment")
+        conf = res.get("confidence")
+        if label is not None and conf is not None:
+            reply = f"{reply} (sentiment: {label}, confidence: {float(conf):.2f})"
+    except Exception as e:
+        reply = f"Sorry—error in ChatBot: {type(e).__name__}. Using fallback."
+    history = history + [[message, reply]]
+    return history
+
+\n================================================================================\nEND FILE: logged_in_bot\handler.py\n================================================================================\n\n================================================================================\nBEGIN FILE: logged_in_bot\sentiment_azure.py\n================================================================================\n\n# /logged_in_bot/sentiment_azure.py
+\n================================================================================\nEND FILE: logged_in_bot\sentiment_azure.py\n================================================================================\n\n================================================================================\nBEGIN FILE: logged_in_bot\tools.py\n================================================================================\n\n# /logged_in_bot/tools.py
+\n================================================================================\nEND FILE: logged_in_bot\tools.py\n================================================================================\n\n================================================================================\nBEGIN FILE: memory\rag\indexer.py\n================================================================================\n\n# /memory/rag/data/indexer.py
+\n================================================================================\nEND FILE: memory\rag\indexer.py\n================================================================================\n\n================================================================================\nBEGIN FILE: memory\rag\retriever.py\n================================================================================\n\n# /memory/rag/data/retriever.py
+\n================================================================================\nEND FILE: memory\rag\retriever.py\n================================================================================\n\n================================================================================\nBEGIN FILE: memory\sessions.py\n================================================================================\n\n# /memory/sessions.py
+\n================================================================================\nEND FILE: memory\sessions.py\n================================================================================\n\n================================================================================\nBEGIN FILE: memory\store.py\n================================================================================\n\n# /memory/sessions.py
+
+DB={}
+\n================================================================================\nEND FILE: memory\store.py\n================================================================================\n\n================================================================================\nBEGIN FILE: nlu\pipeline.py\n================================================================================\n\n# /nlu/pipeline.py
+
+def analyze(t): return {'intent':'general'}
+\n================================================================================\nEND FILE: nlu\pipeline.py\n================================================================================\n\n================================================================================\nBEGIN FILE: nlu\prompts.py\n================================================================================\n\n# /nlu/prompts.py
+\n================================================================================\nEND FILE: nlu\prompts.py\n================================================================================\n\n================================================================================\nBEGIN FILE: nlu\router.py\n================================================================================\n\n# /nlu/router.py
+\n================================================================================\nEND FILE: nlu\router.py\n================================================================================\n\n================================================================================\nBEGIN FILE: notebooks\ChatbotIntegration.ipynb\n================================================================================\n\n# %% [code cell 1]\nfrom agenticcore.chatbot.services import ChatBot
+bot = ChatBot()
+print(bot.reply("Testing from notebook"))\n\n# %% [code cell 2]\nimport os
+
+# Point to your FastAPI server (change if needed)
+import os
+
+# Default backend URL (can be overridden later via the widget)
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000")
+
+# Provider hint (optional; providers_unified auto-detects if keys exist)
+# Examples:
+# os.environ["AI_PROVIDER"] = "hf"
+# os.environ["HF_API_KEY"] = "hf_XXXXXXXX..."   # if using Hugging Face
+# os.environ["MICROSOFT_AI_SERVICE_ENDPOINT"] = "https://<name>.cognitiveservices.azure.com/"
+# os.environ["MICROSOFT_AI_API_KEY"] = "<your-azure-key>"
+
+BACKEND_URL\n\n# %% [code cell 3]\nimport os
+import json
+import requests
+from typing import Dict, Any
+
+# Default backend URL
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000")
+
+def send_via_api(message: str, url: str = BACKEND_URL) -> Dict[str, Any]:
+    """POST to FastAPI /chatbot/message. Returns dict with reply/sentiment/confidence."""
+    u = url.rstrip("/") + "/chatbot/message"
+    r = requests.post(u, json={"message": message}, timeout=20)
+    r.raise_for_status()
+    return r.json()
+
+def send_via_library(message: str) -> Dict[str, Any]:
+    """Call ChatBot() directly inside this kernel."""
+    from agenticcore.chatbot.services import ChatBot
+    return ChatBot().reply(message)
+
+def health(url: str = BACKEND_URL) -> Dict[str, Any]:
+    r = requests.get(url.rstrip("/") + "/health", timeout=10)
+    r.raise_for_status()
+    return r.json()\n\n# %% [code cell 4]\nimport ipywidgets as W
+from IPython.display import display, HTML, clear_output
+
+mode = W.ToggleButtons(
+    options=[("API", "api"), ("Library", "lib")],
+    value="api",
+    description="Route:",
+)
+backend = W.Text(value=BACKEND_URL, placeholder="http://127.0.0.1:8000", description="Backend:", layout=W.Layout(width="60%"))
+save_btn = W.Button(description="Save", button_style="info")
+msg = W.Text(placeholder="Type a message…", description="You:", layout=W.Layout(width="60%"))
+send_btn = W.Button(description="Send", button_style="primary")
+cap_btn = W.Button(description="Capabilities", tooltip="Show ChatBot capabilities")
+out = W.Output()
+
+def on_save(_):
+    os.environ["BACKEND_URL"] = backend.value.strip()
+    with out:
+        print(f"[config] BACKEND_URL = {os.environ['BACKEND_URL']}")
+
+def on_send(_):
+    text = msg.value.strip()
+    if not text:
+        with out:
+            print("[warn] Please enter some text.")
+        return
+    try:
+        if mode.value == "api":
+            data = send_via_api(text, backend.value.strip())
+        else:
+            data = send_via_library(text)
+        with out:
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+    except Exception as e:
+        with out:
+            print(f"[error] {e}")
+
+def on_caps(_):
+    try:
+        # Prefer library capabilities; keeps working even if API is down
+        from agenticcore.chatbot.services import ChatBot
+        data = ChatBot().capabilities()
+        with out:
+            print(json.dumps({"capabilities": data}, indent=2))
+    except Exception as e:
+        with out:
+            print(f"[error capabilities] {e}")
+
+save_btn.on_click(on_save)
+send_btn.on_click(on_send)
+cap_btn.on_click(on_caps)
+
+display(W.HBox([mode, backend, save_btn]))
+display(W.HBox([msg, send_btn, cap_btn]))
+display(out)
+
+# Optional visual hint
+display(HTML("""
+<div style="margin-top:8px;opacity:.8">
+  Tip: API path requires your FastAPI server running at /chatbot/message.
+  Switch to <b>Library</b> mode for offline tests.
+</div>
+"""))\n\n# %% [code cell 5]\nimport pandas as pd
+
+tests = [
+    "I absolutely love this project!",
+    "This is awful and broken.",
+    "Can you list your capabilities?",
+    "",  # malformed/empty
+]
+
+rows = []
+for t in tests:
+    try:
+        data = send_via_api(t, backend.value.strip()) if mode.value == "api" else send_via_library(t)
+        rows.append({"message": t, **data})
+    except Exception as e:
+        rows.append({"message": t, "reply": f"(error) {e}", "sentiment": None, "confidence": None})
+
+df = pd.DataFrame(rows)
+df\n\n# %% [code cell 6]\ntry:
+    print("Health:", health(backend.value.strip()))
+except Exception as e:
+    print("Health check failed:", e)
+
+# Simple acceptance checks
+sample = send_via_library("hello")
+assert all(k in sample for k in ("reply", "sentiment", "confidence"))
+print("Library OK:", sample)
+
+sample_api = send_via_api("hello from api", backend.value.strip())
+assert all(k in sample_api for k in ("reply", "sentiment", "confidence"))
+print("API OK:", sample_api)\n\n# %% [code cell 7]\n\n\n# %% [code cell 8]\nimport requests, os, json
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000")
+routes = requests.get(BACKEND_URL.rstrip("/") + "/openapi.json", timeout=10).json()["paths"]
+print(json.dumps(list(routes.keys())[:20], indent=2))\n\n# %% [code cell 9]\nsend_via_api("hello from api", BACKEND_URL.strip())\n\n# %% [code cell 10]\nprint("Health:", health(BACKEND_URL))
+sample = send_via_library("hello")
+print("Library OK:", sample)
+
+sample_api = send_via_api("hello from api", BACKEND_URL)
+print("API OK:", sample_api)\n\n# %% [code cell 11]\n# Pick a clean port to avoid collisions (e.g., 8077)
+uvicorn backend.app.main:app --reload --port 8077 --app-dir .\n\n# %% [code cell 12]\n\n\n# %% [code cell 13]\n\n\n# %% [code cell 14]\n\n\n# %% [code cell 15]\n\n\n================================================================================\nEND FILE: notebooks\ChatbotIntegration.ipynb\n================================================================================\n\n================================================================================\nBEGIN FILE: notebooks\SimpleTraditionalChatbot.ipynb\n================================================================================\n\n# %% [code cell 1]\nimport os
+os.chdir(r"C:\Users\User\PortaeOS-skeleton\packages\agenticcore")  # <-- adjust to your repo root
+
+# Python one-liner in the same env where the server runs
+import sys; sys.path.insert(0,'.')
+import backend.app.main as m
+[(getattr(r,'path',None), getattr(r,'methods',None)) for r in m.app.routes]
+
+# Expect to see ('/chatbot/message', {'POST'}) in the list\n\n# %% [code cell 2]\nimport requests, json, os
+BASE = os.environ.get("BACKEND_URL","http://127.0.0.1:8000").rstrip("/")
+print("Health:", requests.get(BASE+"/health").json())
+r = requests.post(BASE+"/chatbot/message", json={"message":"hello via api"})
+print("Reply:", r.status_code, r.json())\n\n# %% [code cell 3]\nfrom agenticcore.chatbot.services import ChatBot
+print(ChatBot().reply("hello via library"))\n\n# %% [code cell 4]\n# Cell 1: config + helpers
+import os, json, requests
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000").rstrip("/")
+
+def health(url: str = BACKEND_URL): 
+    r = requests.get(url + "/health", timeout=10); r.raise_for_status(); return r.json()
+
+def send_via_api(message: str, url: str = BACKEND_URL):
+    r = requests.post(url + "/chatbot/message", json={"message": message}, timeout=20)
+    r.raise_for_status(); return r.json()
+
+def send_via_library(message: str):
+    from agenticcore.chatbot.services import ChatBot
+    return ChatBot().reply(message)
+
+print("BACKEND_URL =", BACKEND_URL)
+print("Health:", health())\n\n# %% [code cell 5]\n# Cell 2: quick acceptance checks
+lib = send_via_library("hello")
+assert all(k in lib for k in ("reply","sentiment","confidence"))
+print("Library OK:", lib)
+
+api = send_via_api("hello from api")
+assert all(k in api for k in ("reply","sentiment","confidence"))
+print("API OK:", api)\n\n# %% [code cell 6]\n# Notebook Config
+import os, json, requests
+from typing import Dict, Any
+
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000").rstrip("/")
+
+def health(url: str = BACKEND_URL) -> Dict[str, Any]:
+    """GET /health to verify server is up."""
+    r = requests.get(url + "/health", timeout=10)
+    r.raise_for_status()
+    return r.json()
+
+def send_via_api(message: str, url: str = BACKEND_URL) -> Dict[str, Any]:
+    """POST to FastAPI /chatbot/message. Returns reply/sentiment/confidence."""
+    r = requests.post(url + "/chatbot/message", json={"message": message}, timeout=20)
+    r.raise_for_status()
+    return r.json()
+
+def send_via_library(message: str) -> Dict[str, Any]:
+    """Call ChatBot() directly (no server needed)."""
+    from agenticcore.chatbot.services import ChatBot
+    return ChatBot().reply(message)
+
+print("BACKEND_URL =", BACKEND_URL)\n\n# %% [code cell 7]\nimport ipywidgets as W
+from IPython.display import display, HTML
+
+mode = W.ToggleButtons(options=[("API", "api"), ("Library", "lib")], value="api", description="Route:")
+backend = W.Text(value=BACKEND_URL, description="Backend:", layout=W.Layout(width="60%"))
+save_btn = W.Button(description="Save", button_style="info")
+msg = W.Text(placeholder="Type a message…", description="You:", layout=W.Layout(width="60%"))
+send_btn = W.Button(description="Send", button_style="primary")
+cap_btn = W.Button(description="Capabilities")
+out = W.Output()
+
+def on_save(_):
+    os.environ["BACKEND_URL"] = backend.value.strip().rstrip("/")
+    with out: print("[config] BACKEND_URL =", os.environ["BACKEND_URL"])
+
+def on_send(_):
+    text = msg.value.strip()
+    if not text:
+        with out: print("[warn] Please enter some text.")
+        return
+    try:
+        data = send_via_api(text, backend.value.strip()) if mode.value == "api" else send_via_library(text)
+        with out: print(json.dumps(data, indent=2, ensure_ascii=False))
+    except Exception as e:
+        with out: print(f"[error] {e}")
+
+def on_caps(_):
+    try:
+        from agenticcore.chatbot.services import ChatBot
+        with out: print(json.dumps({"capabilities": ChatBot().capabilities()}, indent=2))
+    except Exception as e:
+        with out: print(f"[error capabilities] {e}")
+
+save_btn.on_click(on_save); send_btn.on_click(on_send); cap_btn.on_click(on_caps)
+
+display(W.HBox([mode, backend, save_btn]))
+display(W.HBox([msg, send_btn, cap_btn]))
+display(out)
+display(HTML('<div style="margin-top:8px;opacity:.8">Tip: ensure FastAPI exposes <code>/chatbot/message</code>. Switch to Library for offline tests.</div>'))\n\n# %% [code cell 8]\n# Backend health (if running)
+try:
+    print("Health:", health(backend.value.strip()))
+except Exception as e:
+    print("Health check failed:", e)
+
+# Library path always available
+sample = send_via_library("hello")
+assert all(k in sample for k in ("reply", "sentiment", "confidence"))
+print("Library OK:", sample)
+
+# API path (requires uvicorn backend running)
+try:
+    sample_api = send_via_api("hello from api", backend.value.strip())
+    assert all(k in sample_api for k in ("reply", "sentiment", "confidence"))
+    print("API OK:", sample_api)
+except Exception as e:
+    print("API test failed (start uvicorn?):", e)\n\n# %% [code cell 9]\nfrom IPython.display import Markdown
+Markdown("""
+### What to capture for the report
+- Screenshot of **/health** and a successful **/chatbot/message** call.
+- Notebook output using **API** mode and **Library** mode.
+- Short note: environment variables used (e.g., `MICROSOFT_AI_*`, `AI_PROVIDER`, `HF_API_KEY`).
+- Brief discussion of any errors and fixes (e.g., route mounting, ports).
+""")\n\n# %% [code cell 10]\n\n\n# %% [code cell 11]\n\n\n# %% [code cell 12]\n\n\n================================================================================\nEND FILE: notebooks\SimpleTraditionalChatbot.ipynb\n================================================================================\n\n================================================================================\nBEGIN FILE: pyproject.toml\n================================================================================\n\n# pyproject.toml
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+
+[tool.pytest.ini_options]
+addopts = "-q"
+\n================================================================================\nEND FILE: pyproject.toml\n================================================================================\n\n================================================================================\nBEGIN FILE: README.md\n================================================================================\n\n<!-- README.md -->
+# Agentic-Chat-bot-
+Agentic Chat-bot with RAG, Memory, and Privacy Considerations. 
+
+# Storefront Chatbot
+
+This repo follows a modular layout with a Gradio UI, NLU pipeline, anonymous and logged-in flows,
+guardrails, and optional Azure sentiment.
+
+## Quickstart
+```bash
+make dev
+make run
+# open http://localhost:7860
+```
+
+## Agentic Integration
+- Core bot: `agenticcore/chatbot/services.py`
+- Providers: `agenticcore/providers_unified.py`
+- CLI: `python -m agenticcore.cli agentic "hello"` (loads .env)
+- FastAPI demo: `uvicorn integrations.web.fastapi.web_agentic:app --reload`
+
+## Added Samples & Tests
+- chat.html → `app/assets/html/chat.html`
+- echo_bot.py → `integrations/botframework/bots/echo_bot.py`
+- ChatbotIntegration.ipynb → `notebooks/ChatbotIntegration.ipynb`
+- SimpleTraditionalChatbot.ipynb → `notebooks/SimpleTraditionalChatbot.ipynb`
+- smoke_test.py → `tests/smoke_test.py`
+- test_routes.py → `tests/test_routes.py`
+- quick_sanity.py → `tools/quick_sanity.py`
+- example.py → `examples/example.py`
+- service.py → `samples/service.py`
+- DEV_DOC.md → `docs/DEV_DOC.md`
+
+Run `pytest -q` for tests; open HTML in `app/assets/html/` to try local UIs.
+
+
+---
+This is the **unified** storefront-chatbot bundle.
+Duplicates from earlier skeletons were removed; priority order was:
+1) storefront_chatbot_final_bundle
+2) storefront_chatbot_merged_with_agentic
+3) storefront_chatbot_skeleton
+\n================================================================================\nEND FILE: README.md\n================================================================================\n\n================================================================================\nBEGIN FILE: requirements.txt\n================================================================================\n\ngradio>=4.0
+transformers>=4.41.0
+torch>=2.2.0
+scikit-learn>=1.3.0
+pandas>=2.1.0
+numpy>=1.26.0
+pytest>=7.4.0
+# Optional Azure
+azure-ai-textanalytics>=5.3.0
+python-dotenv>=1.0
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+# Optional for Bot Framework sample:
+# aiohttp>=3.9
+# botbuilder-core>=4.14
+\n================================================================================\nEND FILE: requirements.txt\n================================================================================\n\n================================================================================\nBEGIN FILE: samples\service.py\n================================================================================\n\n# /samples/services.py
+import os
+from typing import Dict, Any
+
+# Use the unified provider layer (HF, Azure, OpenAI, Cohere, DeepAI, or offline)
+from packages.agenticcore.agenticcore.providers_unified import analyze_sentiment, generate_text
+
+
+class ChatBot:
+    """
+    Thin façade over provider-agnostic functions.
+    - Provider selection is automatic unless AI_PROVIDER is set (hf|azure|openai|cohere|deepai|offline).
+    - Reply shape: {"reply": str, "sentiment": str, "confidence": float}
+    """
+
+    def __init__(self) -> None:
+        # Optional: pin a provider via env; otherwise providers_unified auto-detects.
+        self.provider = os.getenv("AI_PROVIDER") or "auto"
+
+    def reply(self, message: str) -> Dict[str, Any]:
+        msg = (message or "").strip()
+        if not msg:
+            return {"reply": "Please enter some text.", "sentiment": "unknown", "confidence": 0.0}
+
+        if msg.lower() in {"help", "/help"}:
+            return {
+                "reply": self._help_text(),
+                "capabilities": {
+                    "system": "chatbot",
+                    "mode": self.provider,
+                    "features": ["text-input", "sentiment-analysis", "help"],
+                    "commands": {"help": "Describe capabilities and usage."},
+                },
+            }
+
+        s = analyze_sentiment(msg)  # -> {"provider","label","score",...}
+        label = str(s.get("label", "neutral"))
+        score = float(s.get("score", 0.5))
+
+        # Keep the same phrasing used elsewhere so surfaces are consistent.
+        reply = self._compose(label)
+        return {"reply": reply, "sentiment": label, "confidence": round(score, 2)}
+
+    @staticmethod
+    def _compose(label: str) -> str:
+        if label == "positive":
+            return "Thanks for sharing. I detected a positive sentiment."
+        if label == "negative":
+            return "I hear your concern. I detected a negative sentiment."
+        if label == "neutral":
+            return "Noted. The sentiment appears neutral."
+        if label == "mixed":
+            return "Your message has mixed signals. Can you clarify?"
+        return "I could not determine the sentiment. Please rephrase."
+
+    @staticmethod
+    def _help_text() -> str:
+        return "I analyze sentiment and respond concisely. Send any text or type 'help'."
+\n================================================================================\nEND FILE: samples\service.py\n================================================================================\n\n================================================================================\nBEGIN FILE: scripts\check_compliance.py\n================================================================================\n\n# /scripts/check_compliance.py
+
+# Fails if disallowed deps appear (placeholder)
+\n================================================================================\nEND FILE: scripts\check_compliance.py\n================================================================================\n\n================================================================================\nBEGIN FILE: scripts\run_local.sh\n================================================================================\n\n# /scripts/run_local.sh
+#!/usr/bin/env bash
+set -euo pipefail
+export PYTHONPATH=.
+python -c "from storefront_chatbot.app.app import build; build().launch(server_name='0.0.0.0', server_port=7860)"
+\n================================================================================\nEND FILE: scripts\run_local.sh\n================================================================================\n\n================================================================================\nBEGIN FILE: scripts\seed_data.py\n================================================================================\n\n# /scripts/seed_data.py
+# Load sample products/FAQs (placeholder)
+
+\n================================================================================\nEND FILE: scripts\seed_data.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tests\smoke_test.py\n================================================================================\n\n# /test/smoke_test.py
+import os, json, requests
+from agenticcore.chatbot.services import ChatBot
+
+def p(title, data): print(f"\n== {title} ==\n{json.dumps(data, indent=2)}")
+
+bot = ChatBot()
+p("Lib/Direct", bot.reply("I really love this"))
+
+url = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
+r = requests.get(f"{url}/health"); p("API/Health", r.json())
+r = requests.post(f"{url}/chatbot/message", json={"message":"api path test"}); p("API/Chat", r.json())
+\n================================================================================\nEND FILE: tests\smoke_test.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tests\test_anon_bot.py\n================================================================================\n\n# /test/test_anon_bot.py
+def test_anon_stub(): assert True
+
+\n================================================================================\nEND FILE: tests\test_anon_bot.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tests\test_guardrails.py\n================================================================================\n\n# /test/test_guardrails.py
+def test_guardrails_stub(): assert True
+\n================================================================================\nEND FILE: tests\test_guardrails.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tests\test_logged_in_bot.py\n================================================================================\n\n# /test/test_logged_in_bot.py
+def test_logged_stub(): assert True
+\n================================================================================\nEND FILE: tests\test_logged_in_bot.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tests\test_memory.py\n================================================================================\n\n# /test/test_memory.py
+def test_memory_stub(): assert True
+\n================================================================================\nEND FILE: tests\test_memory.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tests\test_nlu.py\n================================================================================\n\n# /test/test_nlu.py
+def test_nlu_stub(): assert True
+\n================================================================================\nEND FILE: tests\test_nlu.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tests\test_routes.py\n================================================================================\n\n# /test/test_routes.py
+def test_routes_mount():
+    from backend.app.main import create_app
+    app = create_app()
+    paths = [getattr(r, "path", "") for r in app.routes]
+    assert "/chatbot/message" in paths
+    assert "/health" in paths
+\n================================================================================\nEND FILE: tests\test_routes.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tools\quick_sanity.py\n================================================================================\n\n# tools/quick_sanity.py
+"""
+Tiny sanity test for MBF helpers. Run from repo root or set PYTHONPATH.
+"""
+import sys, os
+# Add repo root so 'mbf_bot' is importable if running directly
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from mbf_bot.skills import reverse_text, capabilities, normalize
+
+print("caps:", capabilities())
+print("reverse:", reverse_text("hello"))
+print("cmd:", normalize("  Help  "))
+\n================================================================================\nEND FILE: tools\quick_sanity.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tree_filter.py\n================================================================================\n\n#!/usr/bin/env python3
+r"""
+Write a tree view of a folder to a file.
+
+Usage:
+  python tree.py             # current folder -> tree.txt
+  python tree.py C:\proj -o proj-tree.txt
+  python tree.py . --max-depth 3
+"""
+
+import os, argparse, fnmatch
+
+EXCLUDE_DIRS = {
+    ".git", ".hg", ".svn", "__pycache__", "node_modules",
+    ".venv", "venv", "env", "dist", "build",
+    "artifacts", "logs", ".idea", ".vscode", ".pytest_cache",
+    ".mypy_cache", ".ruff_cache", ".tox", ".nox", ".hypothesis",
+    ".cache", ".gradle", ".parcel-cache", ".next", ".turbo",
+    ".pnpm-store", ".yarn", ".yarn/cache", ".nuxt", ".svelte-kit",
+}
+
+EXCLUDE_FILES = {".DS_Store", "Thumbs.db", ".coverage", ".python-version"}
+
+EXCLUDE_GLOBS = [
+    "*.log", "*.tmp", "*.temp", "*.bak", "*.swp", "*.swo",
+    "*.pyc", "*.pyo", "*.pyd", "*.class",
+    "*.lock", "*.pid",
+    "*.egg-info", "*.eggs",
+    "*.sqlite", "*.sqlite3", "*.db", "*.pkl",
+    ".env", ".env.*",
+]
+
+
+def _entries_sorted(path, exclude_dirs=None, exclude_files=None, exclude_globs=None):
+    exclude_dirs = set(EXCLUDE_DIRS if exclude_dirs is None else exclude_dirs)
+    exclude_files = set(EXCLUDE_FILES if exclude_files is None else exclude_files)
+    exclude_globs = list(EXCLUDE_GLOBS if exclude_globs is None else exclude_globs)
+    try:
+        with os.scandir(path) as it:
+            items = []
+            for e in it:
+                name = e.name
+                if name in exclude_files:
+                    continue
+                if any(fnmatch.fnmatch(name, pat) for pat in exclude_globs):
+                    continue
+                if e.is_dir(follow_symlinks=False) and name in exclude_dirs:
+                    continue
+                items.append(e)
+    except PermissionError:
+        return []
+    items.sort(key=lambda e: (not e.is_dir(follow_symlinks=False), e.name.lower()))
+    return items
+
+
+def _draw(root, out, max_depth=None, follow_symlinks=False, prefix="", exclude_dirs=None, exclude_files=None, exclude_globs=None):
+    if max_depth is not None and max_depth < 0:
+        return
+    items = _entries_sorted(root, exclude_dirs=exclude_dirs, exclude_files=exclude_files, exclude_globs=exclude_globs)
+    for i, e in enumerate(items):
+        last = (i == len(items) - 1)
+        connector = "└── " if last else "├── "
+        line = f"{prefix}{connector}{e.name}"
+        if e.is_symlink():
+            try:
+                line += f" -> {os.readlink(e.path)}"
+            except OSError:
+                pass
+        print(line, file=out)
+        if e.is_dir(follow_symlinks=follow_symlinks):
+            new_prefix = prefix + ("    " if last else "│   ")
+            next_depth = None if max_depth is None else max_depth - 1
+            if next_depth is None or next_depth >= 0:
+                _draw(e.path, out, next_depth, follow_symlinks, new_prefix, exclude_dirs, exclude_files, exclude_globs)
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Print a folder tree to a file.")
+    ap.add_argument("path", nargs="?", default=".", help="Root folder (default: .)")
+    ap.add_argument("-o", "--out", default="tree.txt", help="Output file (default: tree.txt)")
+    ap.add_argument("--max-depth", type=int, help="Limit recursion depth")
+    ap.add_argument("--follow-symlinks", action="store_true", help="Recurse into symlinked dirs")
+    ap.add_argument("--exclude-dirs", default="", help="Comma-separated dir names to exclude (in addition to defaults).")
+    ap.add_argument("--exclude-files", default="", help="Comma-separated file names to exclude (in addition to defaults).")
+    ap.add_argument("--exclude-globs", default="", help="Comma-separated glob patterns to exclude (e.g. *.log,*.tmp,.env,.env.*).")
+    args = ap.parse_args()
+
+    # Merge defaults with CLI-specified excludes
+    exclude_dirs = set(EXCLUDE_DIRS)
+    if args.exclude_dirs:
+        exclude_dirs |= {d.strip() for d in args.exclude_dirs.split(",") if d.strip()}
+    exclude_files = set(EXCLUDE_FILES)
+    if args.exclude_files:
+        exclude_files |= {f.strip() for f in args.exclude_files.split(",") if f.strip()}
+    exclude_globs = list(EXCLUDE_GLOBS)
+    if args.exclude_globs:
+        exclude_globs += [g.strip() for g in args.exclude_globs.split(",") if g.strip()]
+
+    root = os.path.abspath(args.path)
+    with open(args.out, "w", encoding="utf-8") as f:
+        print(root, file=f)
+        _draw(root, f, args.max_depth, args.follow_symlinks, "", exclude_dirs, exclude_files, exclude_globs)
+
+    print(f"Wrote {args.out}")
+
+
+if __name__ == "__main__":
+    main()
+\n================================================================================\nEND FILE: tree_filter.py\n================================================================================\n

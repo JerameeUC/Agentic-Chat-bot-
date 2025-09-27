@@ -1,0 +1,103 @@
+C:\Users\User\Agentic-Chat-bot-
+├── agenticcore
+│   ├── chatbot
+│   │   ├── __init__.py
+│   │   └── services.py
+│   ├── __init__.py
+│   ├── cli.py
+│   ├── providers_unified.py
+│   └── web_agentic.py
+├── anon_bot
+│   ├── handler.py
+│   └── rules.py
+├── app
+│   ├── app
+│   │   ├── app.py
+│   │   └── routes.py
+│   ├── assets
+│   │   └── html
+│   │       ├── agenticcore_frontend.html
+│   │       ├── chat.html
+│   │       ├── chat_console.html
+│   │       └── chat_minimal.html
+│   ├── components
+│   ├── mbf_bot
+│   │   ├── __init__.py
+│   │   ├── bot.py
+│   │   └── skills.py
+│   ├── app.py
+│   └── routes.py
+├── core
+│   ├── config.py
+│   ├── logging.py
+│   └── types.py
+├── docs
+│   ├── slides
+│   ├── architecture.md
+│   ├── design.md
+│   ├── DEV_DOC.md
+│   ├── flowchart.png
+│   └── results.md
+├── examples
+│   └── example.py
+├── guardrails
+│   ├── pii_redaction.py
+│   └── safety.py
+├── integrations
+│   ├── azure
+│   │   └── bot_framework.py
+│   ├── botframework
+│   │   ├── bots
+│   │   │   └── echo_bot.py
+│   │   ├── app.py
+│   │   └── bot.py
+│   ├── email
+│   │   └── ticket_stub.py
+│   └── web
+│       └── fastapi
+│           └── web_agentic.py
+├── logged_in_bot
+│   ├── handler.py
+│   ├── sentiment_azure.py
+│   └── tools.py
+├── memory
+│   ├── rag
+│   │   ├── data
+│   │   ├── indexer.py
+│   │   └── retriever.py
+│   ├── sessions.py
+│   └── store.py
+├── nlu
+│   ├── pipeline.py
+│   ├── prompts.py
+│   └── router.py
+├── notebooks
+│   ├── ChatbotIntegration.ipynb
+│   └── SimpleTraditionalChatbot.ipynb
+├── samples
+│   └── service.py
+├── scripts
+│   ├── check_compliance.py
+│   ├── run_local.sh
+│   └── seed_data.py
+├── tests
+│   ├── smoke_test.py
+│   ├── test_anon_bot.py
+│   ├── test_guardrails.py
+│   ├── test_logged_in_bot.py
+│   ├── test_memory.py
+│   ├── test_nlu.py
+│   └── test_routes.py
+├── tools
+│   └── quick_sanity.py
+├── .gitignore
+├── app.zip
+├── flat_tree_filter.py
+├── FLATTENED_CODE.txt
+├── LICENSE
+├── Makefile
+├── pyproject.toml
+├── README.md
+├── requirements.txt
+├── tree.txt
+└── tree_filter.py
