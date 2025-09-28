@@ -11,9 +11,6 @@ C:\Users\User\Agentic-Chat-bot-
 │   ├── handler.py
 │   └── rules.py
 ├── app
-│   ├── app
-│   │   ├── app.py
-│   │   └── routes.py
 │   ├── assets
 │   │   └── html
 │   │       ├── agenticcore_frontend.html
@@ -36,7 +33,6 @@ C:\Users\User\Agentic-Chat-bot-
 │   ├── architecture.md
 │   ├── design.md
 │   ├── DEV_DOC.md
-│   ├── flowchart.png
 │   └── results.md
 ├── examples
 │   └── example.py
@@ -84,10 +80,13 @@ C:\Users\User\Agentic-Chat-bot-
 │   ├── smoke_test.py
 │   ├── test_anon_bot.py
 │   ├── test_guardrails.py
+│   ├── test_indexer.py
 │   ├── test_logged_in_bot.py
 │   ├── test_memory.py
 │   ├── test_nlu.py
-│   └── test_routes.py
+│   ├── test_retriever.py
+│   ├── test_routes.py
+│   └── test_sessions.py
 ├── tools
 │   └── quick_sanity.py
 ├── .gitignore
