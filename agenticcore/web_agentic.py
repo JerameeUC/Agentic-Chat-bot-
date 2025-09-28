@@ -1,4 +1,4 @@
-# agenticcore/web_agentic.py
+# /agenticcore/web_agentic.py
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse
 from agenticcore.chatbot.services import ChatBot

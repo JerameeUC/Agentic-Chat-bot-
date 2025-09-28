@@ -1,9 +1,10 @@
-# /app/app.py
 #!/usr/bin/env python3
-# app.py — aiohttp + Bot Framework (root-level). Routes added explicitly.
+# app.py — aiohttp + Bot Framework; optional Gradio UI mode via APP_MODE=gradio
+
 import os, sys, json
-from aiohttp import web
 from pathlib import Path
+
+from aiohttp import web
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext, ActivityHandler
 from botbuilder.schema import Activity
 
@@ -15,7 +16,7 @@ setup_logging(level=settings.log_level, json_logs=settings.json_logs)
 log = get_logger("bootstrap")
 log.info("starting", extra={"config": settings.to_dict()})
 
-# Bot impl: prefer user's SimpleBot, fallback to tiny bot
+# -------------------- Bot impl (Bot Framework) --------------------
 try:
     from bot import SimpleBot as BotImpl  # user's ActivityHandler
 except Exception:
@@ -61,7 +62,7 @@ bot = BotImpl()
 try:
     from logic import handle_text as _handle_text
 except Exception:
-    from skills import normalize, reverse_text, is_empty
+    from skills import normalize, reverse_text
     def _handle_text(user_text: str) -> str:
         text = (user_text or "").strip()
         if not text:
@@ -74,7 +75,7 @@ except Exception:
             return reverse_text(original)
         return f"You said: {text}"
 
-# -------------------- HTTP handlers (module-level) --------------------
+# -------------------- HTTP handlers (AIOHTTP) --------------------
 async def messages(req: web.Request) -> web.Response:
     ctype = (req.headers.get("Content-Type") or "").lower()
     if "application/json" not in ctype:
@@ -116,11 +117,11 @@ async def plain_chat(req: web.Request) -> web.Response:
     reply = _handle_text(user_text)
     return web.json_response({"reply": reply})
 
-# -------------------- App factory --------------------
+# -------------------- App factory (AIOHTTP) --------------------
 def create_app() -> web.Application:
     app = web.Application()
 
-    # Add routes explicitly (as requested)
+    # Routes
     app.router.add_get("/", home)
     app.router.add_get("/healthz", healthz)
     app.router.add_get("/api/messages", messages_get)
@@ -154,5 +155,69 @@ def create_app() -> web.Application:
 
 app = create_app()
 
+# =====================================================================
+# ===============  Optional Gradio UI (Anonymous mode)  ===============
+# =====================================================================
+def build():
+    """
+    Return a Gradio Blocks UI for simple anonymous chat.
+    Only imported/used when APP_MODE=gradio (keeps aiohttp path lean).
+    """
+    try:
+        import gradio as gr
+    except Exception as e:
+        raise RuntimeError("Gradio is not installed. `pip install gradio`") from e
+
+    # Import UI components lazily
+    from app.components import (
+        build_header, build_footer, build_chat_history, build_chat_input,
+        build_spinner, build_error_banner, set_error, build_sidebar,
+        render_status_badge, render_login_badge, to_chatbot_pairs
+    )
+    from anon_bot.handler import handle_turn
+
+    with gr.Blocks(css="body{background:#fafafa}") as demo:
+        build_header("Storefront Chatbot", "Anonymous mode ready")
+        with gr.Row():
+            with gr.Column(scale=3):
+                _ = render_status_badge("online")
+                _ = render_login_badge(False)
+                chat = build_chat_history()
+                _ = build_spinner(False)
+                error = build_error_banner()
+                txt, send, clear = build_chat_input()
+            with gr.Column(scale=1):
+                mode, clear_btn, faq_toggle = build_sidebar()
+
+        build_footer("0.1.0")
+
+        state = gr.State([])  # history
+
+        def on_send(message, hist):
+            try:
+                new_hist = handle_turn(message, hist, user=None)
+                return "", new_hist, gr.update(value=to_chatbot_pairs(new_hist)), {"value": "", "visible": False}
+            except Exception as e:
+                return "", hist, gr.update(), set_error(error, str(e))
+
+        send.click(on_send, [txt, state], [txt, state, chat, error])
+        txt.submit(on_send, [txt, state], [txt, state, chat, error])
+
+        def on_clear():
+            return [], gr.update(value=[]), {"value": "", "visible": False}
+
+        clear.click(on_clear, None, [state, chat, error])
+
+    return demo
+
+# -------------------- Entrypoint --------------------
 if __name__ == "__main__":
-    web.run_app(app, host=settings.host, port=settings.port)
+    mode = os.getenv("APP_MODE", "aiohttp").lower()
+    if mode == "gradio":
+        # Launch UI server (separate process from aiohttp)
+        port = int(os.getenv("PORT", settings.port or 7860))
+        host = os.getenv("HOST", settings.host or "0.0.0.0")
+        build().launch(server_name=host, server_port=port)
+    else:
+        # Default: Bot Framework + JSON plain-chat endpoints
+        web.run_app(app, host=settings.host, port=settings.port)

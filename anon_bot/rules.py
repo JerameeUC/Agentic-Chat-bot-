@@ -1,4 +1,4 @@
-# anon_bot/rules.py
+# /anon_bot/rules.py
 """
 Lightweight rule set for an anonymous chatbot.
 No external providers required. Pure-Python, deterministic.

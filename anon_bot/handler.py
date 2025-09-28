@@ -1,4 +1,4 @@
-# anon_bot/handler.py
+# /anon_bot/handler.py
 """
 Stateless(ish) turn handler for the anonymous chatbot.
 Signature kept tiny: handle_turn(message, history, user) -> new_history
