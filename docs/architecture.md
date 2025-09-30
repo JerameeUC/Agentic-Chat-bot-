@@ -1,4 +1,4 @@
-<!-- /docs/slides/architecture.md -->
+<!-- /docs/architecture.md -->
 # Architecture
 
 This system follows a **modular chatbot architecture** built around a clear flow of data from the user interface to external services and back. The design emphasizes separation of concerns, allowing each module to handle a specific responsibility while keeping the overall system simple to test and extend.

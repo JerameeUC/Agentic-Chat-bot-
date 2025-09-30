@@ -1,4 +1,4 @@
-<!-- /docs/slides/design.md -->
+<!-- /docs/design.md -->
 # Design Notes
 
 These notes document the reasoning behind major design choices, focusing on **API usage**, **security considerations**, and **tradeoffs** made during development.

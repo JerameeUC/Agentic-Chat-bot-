@@ -1,5 +1,4 @@
-<!-- /docs/slides/DEV_DOC.md -->
-
+<!-- /docs/DEV_DOC.md -->
 ## 3. Functional Requirements
 
 This section describes the functional requirements for connecting a chatbot to an AI-as-a-Service (AIaaS) platform. It defines the expected system behavior, outlines constraints, and sets measurable acceptance criteria. Requirements are grouped into system context, core functions, supporting functions, and non-functional aspects.

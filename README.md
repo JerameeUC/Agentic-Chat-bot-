@@ -1,43 +1,121 @@
 <!-- README.md -->
-# Agentic-Chat-bot-
-Agentic Chat-bot with RAG, Memory, and Privacy Considerations. 
+# Agentic Chatbot
 
-# Storefront Chatbot
+Agentic Chatbot with Retrieval-Augmented Generation (RAG), session memory, and privacy guardrails.  
+The project follows a **modular architecture** with:
+- Gradio UI for interactive demos
+- AIOHTTP backend with lightweight routes
+- Anonymous and logged-in flows
+- Guardrails for safety and PII redaction
+- Optional cloud providers (Azure, Hugging Face, OpenAI, Cohere, DeepAI)
 
-This repo follows a modular layout with a Gradio UI, NLU pipeline, anonymous and logged-in flows,
-guardrails, and optional Azure sentiment.
+---
 
 ## Quickstart
+
+Clone the repo, set up a venv, and install dependencies:
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Run in dev mode:
+
 ```bash
 make dev
 make run
-# open http://localhost:7860
+# open http://localhost:7860 (Gradio UI)
 ```
 
-## Agentic Integration
-- Core bot: `agenticcore/chatbot/services.py`
-- Providers: `agenticcore/providers_unified.py`
-- CLI: `python -m agenticcore.cli agentic "hello"` (loads .env)
-- FastAPI demo: `uvicorn integrations.web.fastapi.web_agentic:app --reload`
+Or run the backend directly:
 
-## Added Samples & Tests
-- chat.html → `app/assets/html/chat.html`
-- echo_bot.py → `integrations/botframework/bots/echo_bot.py`
-- ChatbotIntegration.ipynb → `notebooks/ChatbotIntegration.ipynb`
-- SimpleTraditionalChatbot.ipynb → `notebooks/SimpleTraditionalChatbot.ipynb`
-- smoke_test.py → `tests/smoke_test.py`
-- test_routes.py → `tests/test_routes.py`
-- quick_sanity.py → `tools/quick_sanity.py`
-- example.py → `examples/example.py`
-- service.py → `samples/service.py`
-- DEV_DOC.md → `docs/DEV_DOC.md`
-
-Run `pytest -q` for tests; open HTML in `app/assets/html/` to try local UIs.
-
+```bash
+python app/app.py
+```
 
 ---
-This is the **unified** storefront-chatbot bundle.
-Duplicates from earlier skeletons were removed; priority order was:
-1) storefront_chatbot_final_bundle
-2) storefront_chatbot_merged_with_agentic
-3) storefront_chatbot_skeleton
+
+## Health Checks
+
+The AIOHTTP backend exposes simple endpoints:
+
+```bash
+curl http://127.0.0.1:3978/healthz
+# -> {"status":"ok"}
+
+curl -X POST http://127.0.0.1:3978/plain-chat   -H "Content-Type: application/json"   -d '{"text":"reverse hello"}'
+# -> {"reply":"olleh"}
+```
+
+---
+
+## Agentic Integration
+
+- **Core bot:** `agenticcore/chatbot/services.py`  
+- **Providers:** `agenticcore/providers_unified.py`  
+- **CLI:** `python -m agenticcore.cli agentic "hello"` (loads `.env`)  
+- **FastAPI demo:**  
+  ```bash
+  uvicorn integrations.web.fastapi.web_agentic:app --reload --port 8000
+  ```
+
+---
+
+## Environment Variables
+
+Provider integrations are selected automatically, or you can pin one with `AI_PROVIDER`. Supported keys:
+
+- Hugging Face: `HF_API_KEY`, `HF_MODEL_SENTIMENT`
+- Azure: `MICROSOFT_AI_SERVICE_ENDPOINT`, `MICROSOFT_AI_API_KEY`
+- OpenAI: `OPENAI_API_KEY`
+- Cohere: `COHERE_API_KEY`
+- DeepAI: `DEEPAI_API_KEY`
+
+If no keys are set, the system falls back to **offline sentiment mode**.
+
+---
+
+## Samples & Tests
+
+- **UI samples:**  
+  - `app/assets/html/chat.html` – open in browser for local test  
+- **Bots:**  
+  - `integrations/botframework/bots/echo_bot.py`  
+- **Notebooks:**  
+  - `notebooks/ChatbotIntegration.ipynb`  
+  - `notebooks/SimpleTraditionalChatbot.ipynb`  
+- **Tests:**  
+  - `tests/smoke_test.py`  
+  - `tests/test_routes.py`  
+  - `tests/test_anon_bot.py`  
+- **Misc:**  
+  - `tools/quick_sanity.py`  
+  - `examples/example.py`  
+  - `samples/service.py`
+
+Run all tests:
+
+```bash
+pytest -q
+```
+
+---
+
+## Documentation
+
+- [Developer & Build/Test Guide](docs/Developer_Guide_Build_Test.md)
+
+---
+
+## Project Context
+
+This is the **unified storefront-chatbot bundle**. Earlier skeletons were merged and duplicates removed.  
+Priority order:  
+1. `storefront_chatbot_final_bundle`  
+2. `storefront_chatbot_merged_with_agentic`  
+3. `storefront_chatbot_skeleton`
+
+---
+
+_Developed for MSAI 631 – Human-Computer Interaction Group Project._
