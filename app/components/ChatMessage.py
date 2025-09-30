@@ -1,4 +1,4 @@
-# app/components/ChatMessage.py
+# /app/components/ChatMessage.py
 from __future__ import annotations
 import gradio as gr
 from html import escape

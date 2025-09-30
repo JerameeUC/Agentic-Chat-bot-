@@ -1,4 +1,4 @@
-# app/components/FAQViewer.py
+# /app/components/FAQViewer.py
 from __future__ import annotations
 import gradio as gr
 from typing import List, Dict

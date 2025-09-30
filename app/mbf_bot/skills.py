@@ -1,4 +1,4 @@
-# /app/skills.py
+# /app/mbf_bot//skills.py
 """
 Small, dependency-free helpers used by the MBF SimpleBot.
 """

@@ -1,4 +1,4 @@
-# app/components/ErrorBanner.py
+# /app/components/ErrorBanner.py
 import gradio as gr
 from html import escape
 

@@ -1,4 +1,4 @@
-# app/components/LoginBadge.py
+# /app/components/LoginBadge.py
 import gradio as gr
 
 def render_login_badge(is_logged_in: bool = False) -> gr.HTML:

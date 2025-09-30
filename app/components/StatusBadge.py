@@ -1,4 +1,4 @@
-# app/components/StatusBadge.py
+# /app/components/StatusBadge.py
 import gradio as gr
 
 def render_status_badge(status: str = "online") -> gr.HTML:

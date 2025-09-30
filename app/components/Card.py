@@ -1,4 +1,4 @@
-# app/components/Card.py
+# /app/components/Card.py
 import gradio as gr
 from html import escape
 

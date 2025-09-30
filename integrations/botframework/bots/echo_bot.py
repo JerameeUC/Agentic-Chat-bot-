@@ -1,4 +1,4 @@
-# bots/echo_bot.py
+# /integrations/botframework/bots/echo_bot.py
 from botbuilder.core import ActivityHandler, TurnContext
 from botbuilder.schema import ChannelAccount
 

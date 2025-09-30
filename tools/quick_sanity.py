@@ -1,4 +1,4 @@
-# tools/quick_sanity.py
+# /tools/quick_sanity.py
 """
 Tiny sanity test for MBF helpers. Run from repo root or set PYTHONPATH.
 """

@@ -1,4 +1,4 @@
-# app/components/LoadingSpinner.py
+# /app/components/LoadingSpinner.py
 import gradio as gr
 
 _SPINNER = """

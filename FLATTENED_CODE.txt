@@ -1,4 +1,4 @@
-# Flattened code dump for: C:\Users\User\Agentic-Chat-bot-\n# Files included: 67\n\n\n================================================================================\nBEGIN FILE: agenticcore\__init__.py\n================================================================================\n\n# package
+# Flattened code dump for: C:\Users\User\Agentic-Chat-bot-\n# Files included: 84\n\n\n================================================================================\nBEGIN FILE: agenticcore\__init__.py\n================================================================================\n\n# package
 \n================================================================================\nEND FILE: agenticcore\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: agenticcore\chatbot\__init__.py\n================================================================================\n\n# package
 \n================================================================================\nEND FILE: agenticcore\chatbot\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: agenticcore\chatbot\services.py\n================================================================================\n\n# /agenticcore/chatbot/services.py
 from __future__ import annotations
@@ -564,7 +564,7 @@ def _gen_deepai(prompt: str, max_tokens: int) -> Dict[str, Any]:
     r.raise_for_status()
     data = r.json()
     return {"provider": "deepai", "text": data.get("output", "")}
-\n================================================================================\nEND FILE: agenticcore\providers_unified.py\n================================================================================\n\n================================================================================\nBEGIN FILE: agenticcore\web_agentic.py\n================================================================================\n\n# agenticcore/web_agentic.py
+\n================================================================================\nEND FILE: agenticcore\providers_unified.py\n================================================================================\n\n================================================================================\nBEGIN FILE: agenticcore\web_agentic.py\n================================================================================\n\n# /agenticcore/web_agentic.py
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse
 from agenticcore.chatbot.services import ChatBot
@@ -586,7 +586,7 @@ def index():
 def run_agentic(msg: str = Query(..., description="Message to send to ChatBot")):
     bot = ChatBot()
     return bot.reply(msg)
-\n================================================================================\nEND FILE: agenticcore\web_agentic.py\n================================================================================\n\n================================================================================\nBEGIN FILE: anon_bot\handler.py\n================================================================================\n\n# anon_bot/handler.py
+\n================================================================================\nEND FILE: agenticcore\web_agentic.py\n================================================================================\n\n================================================================================\nBEGIN FILE: anon_bot\handler.py\n================================================================================\n\n# /anon_bot/handler.py
 """
 Stateless(ish) turn handler for the anonymous chatbot.
 Signature kept tiny: handle_turn(message, history, user) -> new_history
@@ -628,7 +628,7 @@ def handle_text(message: str, history: History | None = None) -> str:
     new_hist = handle_turn(message, history, user=None)
     # last item is bot reply
     return new_hist[-1][1] if new_hist else ""
-\n================================================================================\nEND FILE: anon_bot\handler.py\n================================================================================\n\n================================================================================\nBEGIN FILE: anon_bot\rules.py\n================================================================================\n\n# anon_bot/rules.py
+\n================================================================================\nEND FILE: anon_bot\handler.py\n================================================================================\n\n================================================================================\nBEGIN FILE: anon_bot\rules.py\n================================================================================\n\n# /anon_bot/rules.py
 """
 Lightweight rule set for an anonymous chatbot.
 No external providers required. Pure-Python, deterministic.
@@ -720,10 +720,12 @@ def reply_for(text: str, history: History) -> Reply:
     return handle_chat(text.lower(), history)
 \n================================================================================\nEND FILE: anon_bot\rules.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\app.py\n================================================================================\n\n# /app/app.py
 #!/usr/bin/env python3
-# app.py — aiohttp + Bot Framework (root-level). Routes added explicitly.
+# app.py — aiohttp + Bot Framework; optional Gradio UI mode via APP_MODE=gradio
+
 import os, sys, json
-from aiohttp import web
 from pathlib import Path
+
+from aiohttp import web
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext, ActivityHandler
 from botbuilder.schema import Activity
 
@@ -735,7 +737,7 @@ setup_logging(level=settings.log_level, json_logs=settings.json_logs)
 log = get_logger("bootstrap")
 log.info("starting", extra={"config": settings.to_dict()})
 
-# Bot impl: prefer user's SimpleBot, fallback to tiny bot
+# -------------------- Bot impl (Bot Framework) --------------------
 try:
     from bot import SimpleBot as BotImpl  # user's ActivityHandler
 except Exception:
@@ -781,7 +783,7 @@ bot = BotImpl()
 try:
     from logic import handle_text as _handle_text
 except Exception:
-    from skills import normalize, reverse_text, is_empty
+    from skills import normalize, reverse_text
     def _handle_text(user_text: str) -> str:
         text = (user_text or "").strip()
         if not text:
@@ -794,7 +796,7 @@ except Exception:
             return reverse_text(original)
         return f"You said: {text}"
 
-# -------------------- HTTP handlers (module-level) --------------------
+# -------------------- HTTP handlers (AIOHTTP) --------------------
 async def messages(req: web.Request) -> web.Response:
     ctype = (req.headers.get("Content-Type") or "").lower()
     if "application/json" not in ctype:
@@ -836,11 +838,11 @@ async def plain_chat(req: web.Request) -> web.Response:
     reply = _handle_text(user_text)
     return web.json_response({"reply": reply})
 
-# -------------------- App factory --------------------
+# -------------------- App factory (AIOHTTP) --------------------
 def create_app() -> web.Application:
     app = web.Application()
 
-    # Add routes explicitly (as requested)
+    # Routes
     app.router.add_get("/", home)
     app.router.add_get("/healthz", healthz)
     app.router.add_get("/api/messages", messages_get)
@@ -874,8 +876,72 @@ def create_app() -> web.Application:
 
 app = create_app()
 
+# =====================================================================
+# ===============  Optional Gradio UI (Anonymous mode)  ===============
+# =====================================================================
+def build():
+    """
+    Return a Gradio Blocks UI for simple anonymous chat.
+    Only imported/used when APP_MODE=gradio (keeps aiohttp path lean).
+    """
+    try:
+        import gradio as gr
+    except Exception as e:
+        raise RuntimeError("Gradio is not installed. `pip install gradio`") from e
+
+    # Import UI components lazily
+    from app.components import (
+        build_header, build_footer, build_chat_history, build_chat_input,
+        build_spinner, build_error_banner, set_error, build_sidebar,
+        render_status_badge, render_login_badge, to_chatbot_pairs
+    )
+    from anon_bot.handler import handle_turn
+
+    with gr.Blocks(css="body{background:#fafafa}") as demo:
+        build_header("Storefront Chatbot", "Anonymous mode ready")
+        with gr.Row():
+            with gr.Column(scale=3):
+                _ = render_status_badge("online")
+                _ = render_login_badge(False)
+                chat = build_chat_history()
+                _ = build_spinner(False)
+                error = build_error_banner()
+                txt, send, clear = build_chat_input()
+            with gr.Column(scale=1):
+                mode, clear_btn, faq_toggle = build_sidebar()
+
+        build_footer("0.1.0")
+
+        state = gr.State([])  # history
+
+        def on_send(message, hist):
+            try:
+                new_hist = handle_turn(message, hist, user=None)
+                return "", new_hist, gr.update(value=to_chatbot_pairs(new_hist)), {"value": "", "visible": False}
+            except Exception as e:
+                return "", hist, gr.update(), set_error(error, str(e))
+
+        send.click(on_send, [txt, state], [txt, state, chat, error])
+        txt.submit(on_send, [txt, state], [txt, state, chat, error])
+
+        def on_clear():
+            return [], gr.update(value=[]), {"value": "", "visible": False}
+
+        clear.click(on_clear, None, [state, chat, error])
+
+    return demo
+
+# -------------------- Entrypoint --------------------
 if __name__ == "__main__":
-    web.run_app(app, host=settings.host, port=settings.port)
+    mode = os.getenv("APP_MODE", "aiohttp").lower()
+    if mode == "gradio":
+        # Launch UI server (separate process from aiohttp)
+        port = int(os.getenv("PORT", settings.port or 7860))
+        host = os.getenv("HOST", settings.host or "0.0.0.0")
+        build().launch(server_name=host, server_port=port)
+    else:
+        # Default: Bot Framework + JSON plain-chat endpoints
+        web.run_app(app, host=settings.host, port=settings.port)
 \n================================================================================\nEND FILE: app\app.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\assets\html\agenticcore_frontend.html\n================================================================================\n\n<!-- /app/assets/html/agenticcore_frontend.html -->
 <!doctype html>
 <html lang="en">
@@ -1302,7 +1368,285 @@ health();
 </script>
 </body>
 </html>
-\n================================================================================\nEND FILE: app\assets\html\chat_minimal.html\n================================================================================\n\n================================================================================\nBEGIN FILE: app\mbf_bot\__init__.py\n================================================================================\n\n\n================================================================================\nEND FILE: app\mbf_bot\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\mbf_bot\bot.py\n================================================================================\n\n# /app/bot.py
+\n================================================================================\nEND FILE: app\assets\html\chat_minimal.html\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\__init__.py\n================================================================================\n\n# app/components/__init__.py
+
+from .ChatMessage import render_message
+from .ChatHistory import to_chatbot_pairs, build_chat_history
+from .ChatInput import build_chat_input
+from .LoadingSpinner import build_spinner
+from .ErrorBanner import build_error_banner, set_error
+from .StatusBadge import render_status_badge
+from .Header import build_header
+from .Footer import build_footer
+from .Sidebar import build_sidebar
+from .Card import render_card
+from .FAQViewer import build_faq_viewer
+from .ProductCard import render_product_card
+from .LoginBadge import render_login_badge
+
+__all__ = [
+    "render_message",
+    "to_chatbot_pairs",
+    "build_chat_history",
+    "build_chat_input",
+    "build_spinner",
+    "build_error_banner",
+    "set_error",
+    "render_status_badge",
+    "build_header",
+    "build_footer",
+    "build_sidebar",
+    "render_card",
+    "build_faq_viewer",
+    "render_product_card",
+    "render_login_badge",
+]
+\n================================================================================\nEND FILE: app\components\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\Card.py\n================================================================================\n\n# /app/components/Card.py
+import gradio as gr
+from html import escape
+
+def render_card(title: str, body_html: str | None = None, body_text: str | None = None) -> gr.HTML:
+    """
+    Generic panel card. Pass raw HTML (sanitized upstream) or plain text.
+    """
+    if body_html is None:
+        body_html = f"<div style='white-space:pre-wrap'>{escape(body_text or '')}</div>"
+    t = escape(title or "")
+    html = f"""
+    <div style="border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;background:#fff">
+      <div style="font-weight:600;margin-bottom:6px;color:#0f172a">{t}</div>
+      <div style="color:#334155;font-size:14px;line-height:1.5">{body_html}</div>
+    </div>
+    """
+    return gr.HTML(value=html)
+\n================================================================================\nEND FILE: app\components\Card.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\ChatHistory.py\n================================================================================\n\n# /app/components/ChatHistory.py
+from __future__ import annotations
+from typing import List, Tuple
+import gradio as gr
+
+History = List[Tuple[str, str]]  # [("user","hi"), ("bot","hello")]
+
+def to_chatbot_pairs(history: History) -> list[tuple[str, str]]:
+    """
+    Convert [('user','..'),('bot','..')] into gr.Chatbot expected pairs.
+    Pairs are [(user_text, bot_text), ...].
+    """
+    pairs: list[tuple[str, str]] = []
+    buf_user: str | None = None
+    for who, text in history:
+        if who == "user":
+            buf_user = text
+        elif who == "bot":
+            pairs.append((buf_user or "", text))
+            buf_user = None
+    return pairs
+
+def build_chat_history(label: str = "Conversation") -> gr.Chatbot:
+    """
+    Create a Chatbot component (the large chat pane).
+    Use .update(value=to_chatbot_pairs(history)) to refresh.
+    """
+    return gr.Chatbot(label=label, height=360, show_copy_button=True)
+\n================================================================================\nEND FILE: app\components\ChatHistory.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\ChatInput.py\n================================================================================\n\n# /app/components/ChatInput.py
+from __future__ import annotations
+import gradio as gr
+
+def build_chat_input(placeholder: str = "Type a message and press Enter…"):
+    """
+    Returns (textbox, send_button, clear_button).
+    """
+    with gr.Row():
+        txt = gr.Textbox(placeholder=placeholder, scale=8, show_label=False)
+        send = gr.Button("Send", variant="primary", scale=1)
+        clear = gr.Button("Clear", scale=1)
+    return txt, send, clear
+\n================================================================================\nEND FILE: app\components\ChatInput.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\ChatMessage.py\n================================================================================\n\n# /app/components/ChatMessage.py
+from __future__ import annotations
+import gradio as gr
+from html import escape
+
+def render_message(role: str, text: str) -> gr.HTML:
+    """
+    Return a styled HTML bubble for a single message.
+    role: "user" | "bot"
+    """
+    role = (role or "bot").lower()
+    txt = escape(text or "")
+    bg = "#eef2ff" if role == "user" else "#f1f5f9"
+    align = "flex-end" if role == "user" else "flex-start"
+    label = "You" if role == "user" else "Bot"
+    html = f"""
+    <div style="display:flex;justify-content:{align};margin:6px 0;">
+      <div style="max-width: 85%; border-radius:12px; padding:10px 12px; background:{bg}; border:1px solid #e2e8f0;">
+        <div style="font-size:12px; color:#64748b; margin-bottom:4px;">{label}</div>
+        <div style="white-space:pre-wrap; line-height:1.45; font-size:14px; color:#0f172a;">{txt}</div>
+      </div>
+    </div>
+    """
+    return gr.HTML(value=html)
+\n================================================================================\nEND FILE: app\components\ChatMessage.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\ErrorBanner.py\n================================================================================\n\n# /app/components/ErrorBanner.py
+import gradio as gr
+from html import escape
+
+def build_error_banner() -> gr.HTML:
+    return gr.HTML(visible=False)
+
+def set_error(component: gr.HTML, message: str | None):
+    """
+    Helper to update an error banner in event handlers.
+    Usage: error.update(**set_error(error, "Oops"))
+    """
+    if not message:
+        return {"value": "", "visible": False}
+    value = f"""
+    <div style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;padding:10px 12px;border-radius:10px;">
+      <strong>Error:</strong> {escape(message)}
+    </div>
+    """
+    return {"value": value, "visible": True}
+\n================================================================================\nEND FILE: app\components\ErrorBanner.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\FAQViewer.py\n================================================================================\n\n# /app/components/FAQViewer.py
+from __future__ import annotations
+import gradio as gr
+from typing import List, Dict
+
+def build_faq_viewer(faqs: List[Dict[str, str]] | None = None):
+    """
+    Build a simple searchable FAQ viewer.
+    Returns (search_box, results_html, set_data_fn)
+    """
+    faqs = faqs or []
+
+    search = gr.Textbox(label="Search FAQs", placeholder="Type to filter…")
+    results = gr.HTML()
+
+    def _render(query: str):
+        q = (query or "").strip().lower()
+        items = [f for f in faqs if (q in f["q"].lower() or q in f["a"].lower())] if q else faqs
+        if not items:
+            return "<em>No results.</em>"
+        parts = []
+        for f in items[:50]:
+            parts.append(
+                f"<div style='margin:8px 0;'><b>{f['q']}</b><br/><span style='color:#334155'>{f['a']}</span></div>"
+            )
+        return "\n".join(parts)
+
+    search.change(fn=_render, inputs=search, outputs=results)
+    # Initial render
+    results.value = _render("")
+
+    # return a small setter if caller wants to replace faq list later
+    def set_data(new_faqs: List[Dict[str, str]]):
+        nonlocal faqs
+        faqs = new_faqs
+        return {results: _render(search.value)}
+
+    return search, results, set_data
+\n================================================================================\nEND FILE: app\components\FAQViewer.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\Footer.py\n================================================================================\n\n# /app/components/Footer.py
+\n================================================================================\nEND FILE: app\components\Footer.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\Header.py\n================================================================================\n\n# /app/components/Header.py
+import gradio as gr
+from html import escape
+
+def build_header(title: str = "Storefront Chatbot", subtitle: str = "Anonymous mode ready"):
+    t = escape(title)
+    s = escape(subtitle)
+    html = f"""
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px 4px;">
+      <div>
+        <div style="font-weight:700;font-size:20px;color:#0f172a;">{t}</div>
+        <div style="font-size:13px;color:#64748b;">{s}</div>
+      </div>
+    </div>
+    """
+    return gr.HTML(value=html)
+\n================================================================================\nEND FILE: app\components\Header.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\LoadingSpinner.py\n================================================================================\n\n# /app/components/LoadingSpinner.py
+import gradio as gr
+
+_SPINNER = """
+<div class="spinner" style="display:flex;gap:8px;align-items:center;color:#475569;">
+  <svg width="18" height="18" viewBox="0 0 24 24" class="spin">
+    <circle cx="12" cy="12" r="10" stroke="#94a3b8" stroke-width="3" fill="none" opacity="0.3"/>
+    <path d="M22 12a10 10 0 0 1-10 10" stroke="#475569" stroke-width="3" fill="none"/>
+  </svg>
+  <span>Thinking…</span>
+</div>
+<style>
+  .spin{ animation:spin 1s linear infinite;}
+  @keyframes spin { from{transform:rotate(0deg);} to{transform:rotate(360deg);} }
+</style>
+"""
+
+def build_spinner(visible: bool = False) -> gr.HTML:
+    return gr.HTML(value=_SPINNER if visible else "", visible=visible)
+\n================================================================================\nEND FILE: app\components\LoadingSpinner.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\LoginBadge.py\n================================================================================\n\n# /app/components/LoginBadge.py
+import gradio as gr
+
+def render_login_badge(is_logged_in: bool = False) -> gr.HTML:
+    label = "Logged in" if is_logged_in else "Anonymous"
+    color = "#2563eb" if is_logged_in else "#0ea5e9"
+    html = f"""
+    <span style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #e2e8f0;border-radius:999px;">
+      <span style="width:8px;height:8px;background:{color};border-radius:999px;display:inline-block;"></span>
+      <span style="color:#0f172a;font-size:13px;">{label}</span>
+    </span>
+    """
+    return gr.HTML(value=html)
+\n================================================================================\nEND FILE: app\components\LoginBadge.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\ProductCard.py\n================================================================================\n\n# /app/components/ProductCard.py
+import gradio as gr
+from html import escape
+
+def render_product_card(p: dict) -> gr.HTML:
+    """
+    Render a simple product dict with keys:
+      id, name, description, price, currency, tags
+    """
+    name = escape(str(p.get("name", "")))
+    desc = escape(str(p.get("description", "")))
+    price = p.get("price", "")
+    currency = escape(str(p.get("currency", "USD")))
+    tags = p.get("tags") or []
+    tags_html = " ".join(
+        f"<span style='border:1px solid #e2e8f0;padding:2px 6px;border-radius:999px;font-size:12px;color:#334155'>{escape(str(t))}</span>"
+        for t in tags
+    )
+    html = f"""
+    <div style="border:1px solid #e2e8f0;border-radius:12px;padding:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-weight:600;color:#0f172a">{name}</div>
+        <div style="color:#0f172a;font-weight:600">{price} {currency}</div>
+      </div>
+      <div style="color:#334155;margin:6px 0 10px;line-height:1.5">{desc}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">{tags_html}</div>
+    </div>
+    """
+    return gr.HTML(value=html)
+\n================================================================================\nEND FILE: app\components\ProductCard.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\Sidebar.py\n================================================================================\n\n# /app/components/Sidebar.py
+import gradio as gr
+
+def build_sidebar():
+    """
+    Returns (mode_dropdown, clear_btn, faq_toggle)
+    """
+    with gr.Column(scale=1, min_width=220):
+        gr.Markdown("### Settings")
+        mode = gr.Dropdown(choices=["anonymous", "logged-in"], value="anonymous", label="Mode")
+        faq_toggle = gr.Checkbox(label="Show FAQ section", value=False)
+        clear = gr.Button("Clear chat")
+    return mode, clear, faq_toggle
+\n================================================================================\nEND FILE: app\components\Sidebar.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\StatusBadge.py\n================================================================================\n\n# /app/components/StatusBadge.py
+import gradio as gr
+
+def render_status_badge(status: str = "online") -> gr.HTML:
+    s = (status or "offline").lower()
+    color = "#16a34a" if s == "online" else "#ea580c" if s == "busy" else "#ef4444"
+    html = f"""
+    <span style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #e2e8f0;border-radius:999px;">
+      <span style="width:8px;height:8px;background:{color};border-radius:999px;display:inline-block;"></span>
+      <span style="color:#0f172a;font-size:13px;">{s.capitalize()}</span>
+    </span>
+    """
+    return gr.HTML(value=html)
+\n================================================================================\nEND FILE: app\components\StatusBadge.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\mbf_bot\__init__.py\n================================================================================\n\n\n================================================================================\nEND FILE: app\mbf_bot\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\mbf_bot\bot.py\n================================================================================\n\n# /app/mbf_bot/bot.py
 """
 Simple MBF bot:
 - 'help' / 'capabilities' shows features
@@ -1388,7 +1732,7 @@ class SimpleBot(ActivityHandler):
             await turn_context.send_activity(_format_sentiment(result))
         except Exception:
             await turn_context.send_activity(f"You said: {text}")
-\n================================================================================\nEND FILE: app\mbf_bot\bot.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\mbf_bot\skills.py\n================================================================================\n\n# /app/skills.py
+\n================================================================================\nEND FILE: app\mbf_bot\bot.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\mbf_bot\skills.py\n================================================================================\n\n# /app/mbf_bot//skills.py
 """
 Small, dependency-free helpers used by the MBF SimpleBot.
 """
@@ -1912,15 +2256,105 @@ Key components include:
 - **Sentiment Analysis:** An NLP technique that determines the emotional tone behind a text.
 
 \n================================================================================\nEND FILE: docs\DEV_DOC.md\n================================================================================\n\n================================================================================\nBEGIN FILE: docs\results.md\n================================================================================\n\n<!-- /docs/slides/results.md -->
-# Results\n\nChallenges, metrics, screenshots.\n\n================================================================================\nEND FILE: docs\results.md\n================================================================================\n\n================================================================================\nBEGIN FILE: examples\example.py\n================================================================================\n\n# /example/example.py
-"""Simple CLI example that sends a message to the ChatBot and prints the JSON reply."""
+# Results\n\nChallenges, metrics, screenshots.\n\n================================================================================\nEND FILE: docs\results.md\n================================================================================\n\n================================================================================\nBEGIN FILE: examples\example-dev.py\n================================================================================\n\n# /example/example-dev.py
+"""
+Dev environment sanity example.
+
+- Imports ChatBot
+- Sends a test message
+- Prints the JSON reply
+- Confirms basic dependencies work
+
+Usage:
+    python example/example-dev.py
+"""
+
 import json
-from agenticcore.chatbot.services import ChatBot
+import sys
+
+try:
+    from agenticcore.chatbot.services import ChatBot
+except ImportError as e:
+    print("❌ Could not import ChatBot. Did you set PYTHONPATH or install dependencies?")
+    sys.exit(1)
+
+
+def main():
+    bot = ChatBot()
+    msg = "Hello from example-dev!"
+    result = bot.reply(msg)
+
+    print("✅ Dev environment is working")
+    print("Input:", msg)
+    print("Reply JSON:")
+    print(json.dumps(result, indent=2))
+
 
 if __name__ == "__main__":
-    bot = ChatBot()
-    result = bot.reply("hello world")
-    print(json.dumps(result, indent=2))
+    main()
+\n================================================================================\nEND FILE: examples\example-dev.py\n================================================================================\n\n================================================================================\nBEGIN FILE: examples\example.py\n================================================================================\n\n# /example/example.py
+"""
+Simple CLI/REPL example for the ChatBot.
+
+Usage:
+    python example/example.py "hello world"
+    python example/example.py        # enters interactive mode
+"""
+
+import argparse
+import json
+import sys
+
+try:
+    from agenticcore.chatbot.services import ChatBot
+except ImportError as e:
+    print("❌ Could not import ChatBot. Did you set PYTHONPATH or install agenticcore?")
+    sys.exit(1)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="ChatBot CLI/REPL example")
+    parser.add_argument(
+        "message",
+        nargs="*",
+        help="Message to send. Leave empty to start interactive mode.",
+    )
+    args = parser.parse_args()
+
+    try:
+        bot = ChatBot()
+    except Exception as e:
+        print(f"❌ Failed to initialize ChatBot: {e}")
+        sys.exit(1)
+
+    if args.message:
+        # One-shot mode
+        msg = " ".join(args.message)
+        result = bot.reply(msg)
+        print(json.dumps(result, indent=2))
+    else:
+        # Interactive REPL
+        print("💬 Interactive mode. Type 'quit' or 'exit' to stop.")
+        while True:
+            try:
+                msg = input("> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\n👋 Exiting.")
+                break
+
+            if msg.lower() in {"quit", "exit"}:
+                print("👋 Goodbye.")
+                break
+
+            if not msg:
+                continue
+
+            result = bot.reply(msg)
+            print(json.dumps(result, indent=2))
+
+
+if __name__ == "__main__":
+    main()
 \n================================================================================\nEND FILE: examples\example.py\n================================================================================\n\n================================================================================\nBEGIN FILE: flat_tree_filter.py\n================================================================================\n\n#!/usr/bin/env python3
 # flatten_anytree.py — Flatten a folder tree (code/config) into one text file.
 # Usage:
@@ -2134,7 +2568,7 @@ def main(argv: List[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
-\n================================================================================\nEND FILE: flat_tree_filter.py\n================================================================================\n\n================================================================================\nBEGIN FILE: FLATTENED_CODE.txt\n================================================================================\n\n# Flattened code dump for: C:\Users\User\Agentic-Chat-bot-\n# Files included: 67\n\n\n================================================================================\nBEGIN FILE: agenticcore\__init__.py\n================================================================================\n\n# package
+\n================================================================================\nEND FILE: flat_tree_filter.py\n================================================================================\n\n================================================================================\nBEGIN FILE: FLATTENED_CODE.txt\n================================================================================\n\n# Flattened code dump for: C:\Users\User\Agentic-Chat-bot-\n# Files included: 84\n\n\n================================================================================\nBEGIN FILE: agenticcore\__init__.py\n================================================================================\n\n# package
 \n================================================================================\nEND FILE: agenticcore\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: agenticcore\chatbot\__init__.py\n================================================================================\n\n# package
 \n================================================================================\nEND FILE: agenticcore\chatbot\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: agenticcore\chatbot\services.py\n================================================================================\n\n# /agenticcore/chatbot/services.py
 from __future__ import annotations
@@ -2700,7 +3134,7 @@ def _gen_deepai(prompt: str, max_tokens: int) -> Dict[str, Any]:
     r.raise_for_status()
     data = r.json()
     return {"provider": "deepai", "text": data.get("output", "")}
-\n================================================================================\nEND FILE: agenticcore\providers_unified.py\n================================================================================\n\n================================================================================\nBEGIN FILE: agenticcore\web_agentic.py\n================================================================================\n\n# agenticcore/web_agentic.py
+\n================================================================================\nEND FILE: agenticcore\providers_unified.py\n================================================================================\n\n================================================================================\nBEGIN FILE: agenticcore\web_agentic.py\n================================================================================\n\n# /agenticcore/web_agentic.py
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse
 from agenticcore.chatbot.services import ChatBot
@@ -2722,7 +3156,7 @@ def index():
 def run_agentic(msg: str = Query(..., description="Message to send to ChatBot")):
     bot = ChatBot()
     return bot.reply(msg)
-\n================================================================================\nEND FILE: agenticcore\web_agentic.py\n================================================================================\n\n================================================================================\nBEGIN FILE: anon_bot\handler.py\n================================================================================\n\n# anon_bot/handler.py
+\n================================================================================\nEND FILE: agenticcore\web_agentic.py\n================================================================================\n\n================================================================================\nBEGIN FILE: anon_bot\handler.py\n================================================================================\n\n# /anon_bot/handler.py
 """
 Stateless(ish) turn handler for the anonymous chatbot.
 Signature kept tiny: handle_turn(message, history, user) -> new_history
@@ -2764,7 +3198,7 @@ def handle_text(message: str, history: History | None = None) -> str:
     new_hist = handle_turn(message, history, user=None)
     # last item is bot reply
     return new_hist[-1][1] if new_hist else ""
-\n================================================================================\nEND FILE: anon_bot\handler.py\n================================================================================\n\n================================================================================\nBEGIN FILE: anon_bot\rules.py\n================================================================================\n\n# anon_bot/rules.py
+\n================================================================================\nEND FILE: anon_bot\handler.py\n================================================================================\n\n================================================================================\nBEGIN FILE: anon_bot\rules.py\n================================================================================\n\n# /anon_bot/rules.py
 """
 Lightweight rule set for an anonymous chatbot.
 No external providers required. Pure-Python, deterministic.
@@ -2856,10 +3290,12 @@ def reply_for(text: str, history: History) -> Reply:
     return handle_chat(text.lower(), history)
 \n================================================================================\nEND FILE: anon_bot\rules.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\app.py\n================================================================================\n\n# /app/app.py
 #!/usr/bin/env python3
-# app.py — aiohttp + Bot Framework (root-level). Routes added explicitly.
+# app.py — aiohttp + Bot Framework; optional Gradio UI mode via APP_MODE=gradio
+
 import os, sys, json
-from aiohttp import web
 from pathlib import Path
+
+from aiohttp import web
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext, ActivityHandler
 from botbuilder.schema import Activity
 
@@ -2871,7 +3307,7 @@ setup_logging(level=settings.log_level, json_logs=settings.json_logs)
 log = get_logger("bootstrap")
 log.info("starting", extra={"config": settings.to_dict()})
 
-# Bot impl: prefer user's SimpleBot, fallback to tiny bot
+# -------------------- Bot impl (Bot Framework) --------------------
 try:
     from bot import SimpleBot as BotImpl  # user's ActivityHandler
 except Exception:
@@ -2917,7 +3353,7 @@ bot = BotImpl()
 try:
     from logic import handle_text as _handle_text
 except Exception:
-    from skills import normalize, reverse_text, is_empty
+    from skills import normalize, reverse_text
     def _handle_text(user_text: str) -> str:
         text = (user_text or "").strip()
         if not text:
@@ -2930,7 +3366,7 @@ except Exception:
             return reverse_text(original)
         return f"You said: {text}"
 
-# -------------------- HTTP handlers (module-level) --------------------
+# -------------------- HTTP handlers (AIOHTTP) --------------------
 async def messages(req: web.Request) -> web.Response:
     ctype = (req.headers.get("Content-Type") or "").lower()
     if "application/json" not in ctype:
@@ -2972,11 +3408,11 @@ async def plain_chat(req: web.Request) -> web.Response:
     reply = _handle_text(user_text)
     return web.json_response({"reply": reply})
 
-# -------------------- App factory --------------------
+# -------------------- App factory (AIOHTTP) --------------------
 def create_app() -> web.Application:
     app = web.Application()
 
-    # Add routes explicitly (as requested)
+    # Routes
     app.router.add_get("/", home)
     app.router.add_get("/healthz", healthz)
     app.router.add_get("/api/messages", messages_get)
@@ -3010,8 +3446,72 @@ def create_app() -> web.Application:
 
 app = create_app()
 
+# =====================================================================
+# ===============  Optional Gradio UI (Anonymous mode)  ===============
+# =====================================================================
+def build():
+    """
+    Return a Gradio Blocks UI for simple anonymous chat.
+    Only imported/used when APP_MODE=gradio (keeps aiohttp path lean).
+    """
+    try:
+        import gradio as gr
+    except Exception as e:
+        raise RuntimeError("Gradio is not installed. `pip install gradio`") from e
+
+    # Import UI components lazily
+    from app.components import (
+        build_header, build_footer, build_chat_history, build_chat_input,
+        build_spinner, build_error_banner, set_error, build_sidebar,
+        render_status_badge, render_login_badge, to_chatbot_pairs
+    )
+    from anon_bot.handler import handle_turn
+
+    with gr.Blocks(css="body{background:#fafafa}") as demo:
+        build_header("Storefront Chatbot", "Anonymous mode ready")
+        with gr.Row():
+            with gr.Column(scale=3):
+                _ = render_status_badge("online")
+                _ = render_login_badge(False)
+                chat = build_chat_history()
+                _ = build_spinner(False)
+                error = build_error_banner()
+                txt, send, clear = build_chat_input()
+            with gr.Column(scale=1):
+                mode, clear_btn, faq_toggle = build_sidebar()
+
+        build_footer("0.1.0")
+
+        state = gr.State([])  # history
+
+        def on_send(message, hist):
+            try:
+                new_hist = handle_turn(message, hist, user=None)
+                return "", new_hist, gr.update(value=to_chatbot_pairs(new_hist)), {"value": "", "visible": False}
+            except Exception as e:
+                return "", hist, gr.update(), set_error(error, str(e))
+
+        send.click(on_send, [txt, state], [txt, state, chat, error])
+        txt.submit(on_send, [txt, state], [txt, state, chat, error])
+
+        def on_clear():
+            return [], gr.update(value=[]), {"value": "", "visible": False}
+
+        clear.click(on_clear, None, [state, chat, error])
+
+    return demo
+
+# -------------------- Entrypoint --------------------
 if __name__ == "__main__":
-    web.run_app(app, host=settings.host, port=settings.port)
+    mode = os.getenv("APP_MODE", "aiohttp").lower()
+    if mode == "gradio":
+        # Launch UI server (separate process from aiohttp)
+        port = int(os.getenv("PORT", settings.port or 7860))
+        host = os.getenv("HOST", settings.host or "0.0.0.0")
+        build().launch(server_name=host, server_port=port)
+    else:
+        # Default: Bot Framework + JSON plain-chat endpoints
+        web.run_app(app, host=settings.host, port=settings.port)
 \n================================================================================\nEND FILE: app\app.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\assets\html\agenticcore_frontend.html\n================================================================================\n\n<!-- /app/assets/html/agenticcore_frontend.html -->
 <!doctype html>
 <html lang="en">
@@ -3438,7 +3938,285 @@ health();
 </script>
 </body>
 </html>
-\n================================================================================\nEND FILE: app\assets\html\chat_minimal.html\n================================================================================\n\n================================================================================\nBEGIN FILE: app\mbf_bot\__init__.py\n================================================================================\n\n\n================================================================================\nEND FILE: app\mbf_bot\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\mbf_bot\bot.py\n================================================================================\n\n# /app/bot.py
+\n================================================================================\nEND FILE: app\assets\html\chat_minimal.html\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\__init__.py\n================================================================================\n\n# app/components/__init__.py
+
+from .ChatMessage import render_message
+from .ChatHistory import to_chatbot_pairs, build_chat_history
+from .ChatInput import build_chat_input
+from .LoadingSpinner import build_spinner
+from .ErrorBanner import build_error_banner, set_error
+from .StatusBadge import render_status_badge
+from .Header import build_header
+from .Footer import build_footer
+from .Sidebar import build_sidebar
+from .Card import render_card
+from .FAQViewer import build_faq_viewer
+from .ProductCard import render_product_card
+from .LoginBadge import render_login_badge
+
+__all__ = [
+    "render_message",
+    "to_chatbot_pairs",
+    "build_chat_history",
+    "build_chat_input",
+    "build_spinner",
+    "build_error_banner",
+    "set_error",
+    "render_status_badge",
+    "build_header",
+    "build_footer",
+    "build_sidebar",
+    "render_card",
+    "build_faq_viewer",
+    "render_product_card",
+    "render_login_badge",
+]
+\n================================================================================\nEND FILE: app\components\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\Card.py\n================================================================================\n\n# /app/components/Card.py
+import gradio as gr
+from html import escape
+
+def render_card(title: str, body_html: str | None = None, body_text: str | None = None) -> gr.HTML:
+    """
+    Generic panel card. Pass raw HTML (sanitized upstream) or plain text.
+    """
+    if body_html is None:
+        body_html = f"<div style='white-space:pre-wrap'>{escape(body_text or '')}</div>"
+    t = escape(title or "")
+    html = f"""
+    <div style="border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;background:#fff">
+      <div style="font-weight:600;margin-bottom:6px;color:#0f172a">{t}</div>
+      <div style="color:#334155;font-size:14px;line-height:1.5">{body_html}</div>
+    </div>
+    """
+    return gr.HTML(value=html)
+\n================================================================================\nEND FILE: app\components\Card.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\ChatHistory.py\n================================================================================\n\n# /app/components/ChatHistory.py
+from __future__ import annotations
+from typing import List, Tuple
+import gradio as gr
+
+History = List[Tuple[str, str]]  # [("user","hi"), ("bot","hello")]
+
+def to_chatbot_pairs(history: History) -> list[tuple[str, str]]:
+    """
+    Convert [('user','..'),('bot','..')] into gr.Chatbot expected pairs.
+    Pairs are [(user_text, bot_text), ...].
+    """
+    pairs: list[tuple[str, str]] = []
+    buf_user: str | None = None
+    for who, text in history:
+        if who == "user":
+            buf_user = text
+        elif who == "bot":
+            pairs.append((buf_user or "", text))
+            buf_user = None
+    return pairs
+
+def build_chat_history(label: str = "Conversation") -> gr.Chatbot:
+    """
+    Create a Chatbot component (the large chat pane).
+    Use .update(value=to_chatbot_pairs(history)) to refresh.
+    """
+    return gr.Chatbot(label=label, height=360, show_copy_button=True)
+\n================================================================================\nEND FILE: app\components\ChatHistory.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\ChatInput.py\n================================================================================\n\n# /app/components/ChatInput.py
+from __future__ import annotations
+import gradio as gr
+
+def build_chat_input(placeholder: str = "Type a message and press Enter…"):
+    """
+    Returns (textbox, send_button, clear_button).
+    """
+    with gr.Row():
+        txt = gr.Textbox(placeholder=placeholder, scale=8, show_label=False)
+        send = gr.Button("Send", variant="primary", scale=1)
+        clear = gr.Button("Clear", scale=1)
+    return txt, send, clear
+\n================================================================================\nEND FILE: app\components\ChatInput.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\ChatMessage.py\n================================================================================\n\n# /app/components/ChatMessage.py
+from __future__ import annotations
+import gradio as gr
+from html import escape
+
+def render_message(role: str, text: str) -> gr.HTML:
+    """
+    Return a styled HTML bubble for a single message.
+    role: "user" | "bot"
+    """
+    role = (role or "bot").lower()
+    txt = escape(text or "")
+    bg = "#eef2ff" if role == "user" else "#f1f5f9"
+    align = "flex-end" if role == "user" else "flex-start"
+    label = "You" if role == "user" else "Bot"
+    html = f"""
+    <div style="display:flex;justify-content:{align};margin:6px 0;">
+      <div style="max-width: 85%; border-radius:12px; padding:10px 12px; background:{bg}; border:1px solid #e2e8f0;">
+        <div style="font-size:12px; color:#64748b; margin-bottom:4px;">{label}</div>
+        <div style="white-space:pre-wrap; line-height:1.45; font-size:14px; color:#0f172a;">{txt}</div>
+      </div>
+    </div>
+    """
+    return gr.HTML(value=html)
+\n================================================================================\nEND FILE: app\components\ChatMessage.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\ErrorBanner.py\n================================================================================\n\n# /app/components/ErrorBanner.py
+import gradio as gr
+from html import escape
+
+def build_error_banner() -> gr.HTML:
+    return gr.HTML(visible=False)
+
+def set_error(component: gr.HTML, message: str | None):
+    """
+    Helper to update an error banner in event handlers.
+    Usage: error.update(**set_error(error, "Oops"))
+    """
+    if not message:
+        return {"value": "", "visible": False}
+    value = f"""
+    <div style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;padding:10px 12px;border-radius:10px;">
+      <strong>Error:</strong> {escape(message)}
+    </div>
+    """
+    return {"value": value, "visible": True}
+\n================================================================================\nEND FILE: app\components\ErrorBanner.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\FAQViewer.py\n================================================================================\n\n# /app/components/FAQViewer.py
+from __future__ import annotations
+import gradio as gr
+from typing import List, Dict
+
+def build_faq_viewer(faqs: List[Dict[str, str]] | None = None):
+    """
+    Build a simple searchable FAQ viewer.
+    Returns (search_box, results_html, set_data_fn)
+    """
+    faqs = faqs or []
+
+    search = gr.Textbox(label="Search FAQs", placeholder="Type to filter…")
+    results = gr.HTML()
+
+    def _render(query: str):
+        q = (query or "").strip().lower()
+        items = [f for f in faqs if (q in f["q"].lower() or q in f["a"].lower())] if q else faqs
+        if not items:
+            return "<em>No results.</em>"
+        parts = []
+        for f in items[:50]:
+            parts.append(
+                f"<div style='margin:8px 0;'><b>{f['q']}</b><br/><span style='color:#334155'>{f['a']}</span></div>"
+            )
+        return "\n".join(parts)
+
+    search.change(fn=_render, inputs=search, outputs=results)
+    # Initial render
+    results.value = _render("")
+
+    # return a small setter if caller wants to replace faq list later
+    def set_data(new_faqs: List[Dict[str, str]]):
+        nonlocal faqs
+        faqs = new_faqs
+        return {results: _render(search.value)}
+
+    return search, results, set_data
+\n================================================================================\nEND FILE: app\components\FAQViewer.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\Footer.py\n================================================================================\n\n# /app/components/Footer.py
+\n================================================================================\nEND FILE: app\components\Footer.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\Header.py\n================================================================================\n\n# /app/components/Header.py
+import gradio as gr
+from html import escape
+
+def build_header(title: str = "Storefront Chatbot", subtitle: str = "Anonymous mode ready"):
+    t = escape(title)
+    s = escape(subtitle)
+    html = f"""
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px 4px;">
+      <div>
+        <div style="font-weight:700;font-size:20px;color:#0f172a;">{t}</div>
+        <div style="font-size:13px;color:#64748b;">{s}</div>
+      </div>
+    </div>
+    """
+    return gr.HTML(value=html)
+\n================================================================================\nEND FILE: app\components\Header.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\LoadingSpinner.py\n================================================================================\n\n# /app/components/LoadingSpinner.py
+import gradio as gr
+
+_SPINNER = """
+<div class="spinner" style="display:flex;gap:8px;align-items:center;color:#475569;">
+  <svg width="18" height="18" viewBox="0 0 24 24" class="spin">
+    <circle cx="12" cy="12" r="10" stroke="#94a3b8" stroke-width="3" fill="none" opacity="0.3"/>
+    <path d="M22 12a10 10 0 0 1-10 10" stroke="#475569" stroke-width="3" fill="none"/>
+  </svg>
+  <span>Thinking…</span>
+</div>
+<style>
+  .spin{ animation:spin 1s linear infinite;}
+  @keyframes spin { from{transform:rotate(0deg);} to{transform:rotate(360deg);} }
+</style>
+"""
+
+def build_spinner(visible: bool = False) -> gr.HTML:
+    return gr.HTML(value=_SPINNER if visible else "", visible=visible)
+\n================================================================================\nEND FILE: app\components\LoadingSpinner.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\LoginBadge.py\n================================================================================\n\n# /app/components/LoginBadge.py
+import gradio as gr
+
+def render_login_badge(is_logged_in: bool = False) -> gr.HTML:
+    label = "Logged in" if is_logged_in else "Anonymous"
+    color = "#2563eb" if is_logged_in else "#0ea5e9"
+    html = f"""
+    <span style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #e2e8f0;border-radius:999px;">
+      <span style="width:8px;height:8px;background:{color};border-radius:999px;display:inline-block;"></span>
+      <span style="color:#0f172a;font-size:13px;">{label}</span>
+    </span>
+    """
+    return gr.HTML(value=html)
+\n================================================================================\nEND FILE: app\components\LoginBadge.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\ProductCard.py\n================================================================================\n\n# /app/components/ProductCard.py
+import gradio as gr
+from html import escape
+
+def render_product_card(p: dict) -> gr.HTML:
+    """
+    Render a simple product dict with keys:
+      id, name, description, price, currency, tags
+    """
+    name = escape(str(p.get("name", "")))
+    desc = escape(str(p.get("description", "")))
+    price = p.get("price", "")
+    currency = escape(str(p.get("currency", "USD")))
+    tags = p.get("tags") or []
+    tags_html = " ".join(
+        f"<span style='border:1px solid #e2e8f0;padding:2px 6px;border-radius:999px;font-size:12px;color:#334155'>{escape(str(t))}</span>"
+        for t in tags
+    )
+    html = f"""
+    <div style="border:1px solid #e2e8f0;border-radius:12px;padding:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-weight:600;color:#0f172a">{name}</div>
+        <div style="color:#0f172a;font-weight:600">{price} {currency}</div>
+      </div>
+      <div style="color:#334155;margin:6px 0 10px;line-height:1.5">{desc}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">{tags_html}</div>
+    </div>
+    """
+    return gr.HTML(value=html)
+\n================================================================================\nEND FILE: app\components\ProductCard.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\Sidebar.py\n================================================================================\n\n# /app/components/Sidebar.py
+import gradio as gr
+
+def build_sidebar():
+    """
+    Returns (mode_dropdown, clear_btn, faq_toggle)
+    """
+    with gr.Column(scale=1, min_width=220):
+        gr.Markdown("### Settings")
+        mode = gr.Dropdown(choices=["anonymous", "logged-in"], value="anonymous", label="Mode")
+        faq_toggle = gr.Checkbox(label="Show FAQ section", value=False)
+        clear = gr.Button("Clear chat")
+    return mode, clear, faq_toggle
+\n================================================================================\nEND FILE: app\components\Sidebar.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\components\StatusBadge.py\n================================================================================\n\n# /app/components/StatusBadge.py
+import gradio as gr
+
+def render_status_badge(status: str = "online") -> gr.HTML:
+    s = (status or "offline").lower()
+    color = "#16a34a" if s == "online" else "#ea580c" if s == "busy" else "#ef4444"
+    html = f"""
+    <span style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #e2e8f0;border-radius:999px;">
+      <span style="width:8px;height:8px;background:{color};border-radius:999px;display:inline-block;"></span>
+      <span style="color:#0f172a;font-size:13px;">{s.capitalize()}</span>
+    </span>
+    """
+    return gr.HTML(value=html)
+\n================================================================================\nEND FILE: app\components\StatusBadge.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\mbf_bot\__init__.py\n================================================================================\n\n\n================================================================================\nEND FILE: app\mbf_bot\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\mbf_bot\bot.py\n================================================================================\n\n# /app/mbf_bot/bot.py
 """
 Simple MBF bot:
 - 'help' / 'capabilities' shows features
@@ -3524,7 +4302,7 @@ class SimpleBot(ActivityHandler):
             await turn_context.send_activity(_format_sentiment(result))
         except Exception:
             await turn_context.send_activity(f"You said: {text}")
-\n================================================================================\nEND FILE: app\mbf_bot\bot.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\mbf_bot\skills.py\n================================================================================\n\n# /app/skills.py
+\n================================================================================\nEND FILE: app\mbf_bot\bot.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\mbf_bot\skills.py\n================================================================================\n\n# /app/mbf_bot//skills.py
 """
 Small, dependency-free helpers used by the MBF SimpleBot.
 """
@@ -4048,15 +4826,105 @@ Key components include:
 - **Sentiment Analysis:** An NLP technique that determines the emotional tone behind a text.
 
 \n================================================================================\nEND FILE: docs\DEV_DOC.md\n================================================================================\n\n================================================================================\nBEGIN FILE: docs\results.md\n================================================================================\n\n<!-- /docs/slides/results.md -->
-# Results\n\nChallenges, metrics, screenshots.\n\n================================================================================\nEND FILE: docs\results.md\n================================================================================\n\n================================================================================\nBEGIN FILE: examples\example.py\n================================================================================\n\n# /example/example.py
-"""Simple CLI example that sends a message to the ChatBot and prints the JSON reply."""
+# Results\n\nChallenges, metrics, screenshots.\n\n================================================================================\nEND FILE: docs\results.md\n================================================================================\n\n================================================================================\nBEGIN FILE: examples\example-dev.py\n================================================================================\n\n# /example/example-dev.py
+"""
+Dev environment sanity example.
+
+- Imports ChatBot
+- Sends a test message
+- Prints the JSON reply
+- Confirms basic dependencies work
+
+Usage:
+    python example/example-dev.py
+"""
+
 import json
-from agenticcore.chatbot.services import ChatBot
+import sys
+
+try:
+    from agenticcore.chatbot.services import ChatBot
+except ImportError as e:
+    print("❌ Could not import ChatBot. Did you set PYTHONPATH or install dependencies?")
+    sys.exit(1)
+
+
+def main():
+    bot = ChatBot()
+    msg = "Hello from example-dev!"
+    result = bot.reply(msg)
+
+    print("✅ Dev environment is working")
+    print("Input:", msg)
+    print("Reply JSON:")
+    print(json.dumps(result, indent=2))
+
 
 if __name__ == "__main__":
-    bot = ChatBot()
-    result = bot.reply("hello world")
-    print(json.dumps(result, indent=2))
+    main()
+\n================================================================================\nEND FILE: examples\example-dev.py\n================================================================================\n\n================================================================================\nBEGIN FILE: examples\example.py\n================================================================================\n\n# /example/example.py
+"""
+Simple CLI/REPL example for the ChatBot.
+
+Usage:
+    python example/example.py "hello world"
+    python example/example.py        # enters interactive mode
+"""
+
+import argparse
+import json
+import sys
+
+try:
+    from agenticcore.chatbot.services import ChatBot
+except ImportError as e:
+    print("❌ Could not import ChatBot. Did you set PYTHONPATH or install agenticcore?")
+    sys.exit(1)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="ChatBot CLI/REPL example")
+    parser.add_argument(
+        "message",
+        nargs="*",
+        help="Message to send. Leave empty to start interactive mode.",
+    )
+    args = parser.parse_args()
+
+    try:
+        bot = ChatBot()
+    except Exception as e:
+        print(f"❌ Failed to initialize ChatBot: {e}")
+        sys.exit(1)
+
+    if args.message:
+        # One-shot mode
+        msg = " ".join(args.message)
+        result = bot.reply(msg)
+        print(json.dumps(result, indent=2))
+    else:
+        # Interactive REPL
+        print("💬 Interactive mode. Type 'quit' or 'exit' to stop.")
+        while True:
+            try:
+                msg = input("> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\n👋 Exiting.")
+                break
+
+            if msg.lower() in {"quit", "exit"}:
+                print("👋 Goodbye.")
+                break
+
+            if not msg:
+                continue
+
+            result = bot.reply(msg)
+            print(json.dumps(result, indent=2))
+
+
+if __name__ == "__main__":
+    main()
 \n================================================================================\nEND FILE: examples\example.py\n================================================================================\n\n================================================================================\nBEGIN FILE: flat_tree_filter.py\n================================================================================\n\n#!/usr/bin/env python3
 # flatten_anytree.py — Flatten a folder tree (code/config) into one text file.
 # Usage:
@@ -4491,7 +5359,7 @@ def sanitize_user_input(text: str, cfg: SafetyConfig | None = None) -> tuple[str
     """Convenience wrapper used by HTTP routes/bots."""
     rep = assess(text, cfg)
     return rep.sanitized_text, rep
-\n================================================================================\nEND FILE: guardrails\safety.py\n================================================================================\n\n================================================================================\nBEGIN FILE: integrations\azure\bot_framework.py\n================================================================================\n\n# integrations/azure/bot_framework.py
+\n================================================================================\nEND FILE: guardrails\safety.py\n================================================================================\n\n================================================================================\nBEGIN FILE: integrations\azure\bot_framework.py\n================================================================================\n\n# /integrations/azure/bot_framework.py
 """
 Azure Bot Framework integration (stub).
 
@@ -4754,7 +5622,7 @@ class SimpleBot(ActivityHandler):
             await turn_context.send_activity(_format_sentiment(result))
         except Exception:
             await turn_context.send_activity(f"You said: {text}")
-\n================================================================================\nEND FILE: integrations\botframework\bot.py\n================================================================================\n\n================================================================================\nBEGIN FILE: integrations\botframework\bots\echo_bot.py\n================================================================================\n\n# bots/echo_bot.py
+\n================================================================================\nEND FILE: integrations\botframework\bot.py\n================================================================================\n\n================================================================================\nBEGIN FILE: integrations\botframework\bots\echo_bot.py\n================================================================================\n\n# /integrations/botframework/bots/echo_bot.py
 from botbuilder.core import ActivityHandler, TurnContext
 from botbuilder.schema import ChannelAccount
 
@@ -6180,13 +7048,448 @@ def get_value(session_id: str, key: str, default: Any = None) -> Any:
 def sweep() -> int:
     return get_store().sweep()
 \n================================================================================\nEND FILE: memory\sessions.py\n================================================================================\n\n================================================================================\nBEGIN FILE: memory\store.py\n================================================================================\n\n# /memory/sessions.py
+"""
+Simple in-memory session manager for chatbot history.
+Supports TTL, max history, and JSON persistence.
+"""
 
-DB={}
+from __future__ import annotations
+import time, json, uuid
+from pathlib import Path
+from dataclasses import dataclass, field
+from typing import Dict, List, Tuple, Optional, Any
+
+History = List[Tuple[str, str]]  # [("user","..."), ("bot","...")]
+
+
+@dataclass
+class Session:
+    session_id: str
+    user_id: Optional[str] = None
+    history: History = field(default_factory=list)
+    data: Dict[str, Any] = field(default_factory=dict)
+    created_at: float = field(default_factory=time.time)
+    updated_at: float = field(default_factory=time.time)
+
+
+class SessionStore:
+    def __init__(self, ttl_seconds: Optional[int] = 3600, max_history: Optional[int] = 50):
+        self.ttl_seconds = ttl_seconds
+        self.max_history = max_history
+        self._sessions: Dict[str, Session] = {}
+
+    # --- internals ---
+    def _expired(self, sess: Session) -> bool:
+        if self.ttl_seconds is None:
+            return False
+        return (time.time() - sess.updated_at) > self.ttl_seconds
+
+    # --- CRUD ---
+    def create(self, user_id: Optional[str] = None) -> Session:
+        sid = str(uuid.uuid4())
+        sess = Session(session_id=sid, user_id=user_id)
+        self._sessions[sid] = sess
+        return sess
+
+    def get(self, sid: str) -> Optional[Session]:
+        return self._sessions.get(sid)
+
+    def get_history(self, sid: str) -> History:
+        sess = self.get(sid)
+        return list(sess.history) if sess else []
+
+    def append_user(self, sid: str, text: str) -> None:
+        self._append(sid, "user", text)
+
+    def append_bot(self, sid: str, text: str) -> None:
+        self._append(sid, "bot", text)
+
+    def _append(self, sid: str, who: str, text: str) -> None:
+        sess = self.get(sid)
+        if not sess:
+            return
+        sess.history.append((who, text))
+        if self.max_history and len(sess.history) > self.max_history:
+            sess.history = sess.history[-self.max_history:]
+        sess.updated_at = time.time()
+
+    # --- Data store ---
+    def set(self, sid: str, key: str, value: Any) -> None:
+        sess = self.get(sid)
+        if sess:
+            sess.data[key] = value
+            sess.updated_at = time.time()
+
+    def get_value(self, sid: str, key: str, default=None) -> Any:
+        sess = self.get(sid)
+        return sess.data.get(key, default) if sess else default
+
+    def data_dict(self, sid: str) -> Dict[str, Any]:
+        sess = self.get(sid)
+        return dict(sess.data) if sess else {}
+
+    # --- TTL management ---
+    def sweep(self) -> int:
+        """Remove expired sessions; return count removed."""
+        expired = [sid for sid, s in self._sessions.items() if self._expired(s)]
+        for sid in expired:
+            self._sessions.pop(sid, None)
+        return len(expired)
+
+    def all_ids(self):
+        return list(self._sessions.keys())
+
+    # --- persistence ---
+    def save(self, path: Path) -> None:
+        payload = {
+            sid: {
+                "user_id": s.user_id,
+                "history": s.history,
+                "data": s.data,
+                "created_at": s.created_at,
+                "updated_at": s.updated_at,
+            }
+            for sid, s in self._sessions.items()
+        }
+        path.write_text(json.dumps(payload, indent=2))
+
+    @classmethod
+    def load(cls, path: Path) -> "SessionStore":
+        store = cls()
+        if not path.exists():
+            return store
+        raw = json.loads(path.read_text())
+        for sid, d in raw.items():
+            s = Session(
+                session_id=sid,
+                user_id=d.get("user_id"),
+                history=d.get("history", []),
+                data=d.get("data", {}),
+                created_at=d.get("created_at", time.time()),
+                updated_at=d.get("updated_at", time.time()),
+            )
+            store._sessions[sid] = s
+        return store
+
+
+# --- Module-level singleton for convenience ---
+_store = SessionStore()
+
+def new_session(user_id: Optional[str] = None) -> Session:
+    return _store.create(user_id)
+
+def history(sid: str) -> History:
+    return _store.get_history(sid)
+
+def append_user(sid: str, text: str) -> None:
+    _store.append_user(sid, text)
+
+def append_bot(sid: str, text: str) -> None:
+    _store.append_bot(sid, text)
+
+def set_value(sid: str, key: str, value: Any) -> None:
+    _store.set(sid, key, value)
+
+def get_value(sid: str, key: str, default=None) -> Any:
+    return _store.get_value(sid, key, default)
 \n================================================================================\nEND FILE: memory\store.py\n================================================================================\n\n================================================================================\nBEGIN FILE: nlu\pipeline.py\n================================================================================\n\n# /nlu/pipeline.py
+"""
+Lightweight rule-based NLU pipeline.
 
-def analyze(t): return {'intent':'general'}
+No ML dependencies — just keyword matching and simple heuristics.
+Provides intent classification and placeholder entity extraction.
+"""
+
+from typing import Dict, List
+
+
+# keyword → intent maps
+_INTENT_KEYWORDS = {
+    "greeting": {"hi", "hello", "hey", "good morning", "good evening"},
+    "goodbye": {"bye", "goodbye", "see you", "farewell"},
+    "help": {"help", "support", "assist", "how do i"},
+    "faq": {"what is", "who is", "where is", "when is", "how to"},
+    "sentiment_positive": {"great", "awesome", "fantastic", "love"},
+    "sentiment_negative": {"bad", "terrible", "hate", "awful"},
+}
+
+
+def _match_intent(text: str) -> str:
+    low = text.lower().strip()
+    for intent, kws in _INTENT_KEYWORDS.items():
+        for kw in kws:
+            if kw in low:
+                return intent
+    return "general"
+
+
+def _extract_entities(text: str) -> List[str]:
+    """
+    Placeholder entity extractor.
+    For now just returns capitalized words (could be names/places).
+    """
+    return [w for w in text.split() if w.istitle()]
+
+
+def analyze(text: str) -> Dict:
+    """
+    Analyze a user utterance.
+    Returns:
+      {
+        "intent": str,
+        "entities": list[str],
+        "confidence": float
+      }
+    """
+    if not text or not text.strip():
+        return {"intent": "general", "entities": [], "confidence": 0.0}
+
+    intent = _match_intent(text)
+    entities = _extract_entities(text)
+
+    # crude confidence: matched keyword = 0.9, else fallback = 0.5
+    confidence = 0.9 if intent != "general" else 0.5
+
+    return {
+        "intent": intent,
+        "entities": entities,
+        "confidence": confidence,
+    }
+
+
+# quick test
+if __name__ == "__main__":
+    tests = [
+        "Hello there",
+        "Can you help me?",
+        "I love this bot!",
+        "Bye now",
+        "Tell me what is RAG",
+        "random input with no keywords",
+    ]
+    for t in tests:
+        print(t, "->", analyze(t))
 \n================================================================================\nEND FILE: nlu\pipeline.py\n================================================================================\n\n================================================================================\nBEGIN FILE: nlu\prompts.py\n================================================================================\n\n# /nlu/prompts.py
+"""
+Reusable prompt templates for NLU and chatbot responses.
+
+These can be imported anywhere in the app to keep wording consistent.
+They are plain strings / dicts — no external deps required.
+"""
+
+from typing import Dict
+
+# -----------------------------
+# System prompts
+# -----------------------------
+
+SYSTEM_BASE = """\
+You are a helpful, polite chatbot. 
+Answer briefly unless asked for detail.
+"""
+
+SYSTEM_FAQ = """\
+You are a factual Q&A assistant.
+Answer questions directly, citing facts when possible.
+"""
+
+SYSTEM_SUPPORT = """\
+You are a friendly support assistant.
+Offer clear, step-by-step help when the user asks for guidance.
+"""
+
+# -----------------------------
+# Few-shot examples
+# -----------------------------
+
+FEW_SHOTS: Dict[str, list] = {
+    "greeting": [
+        {"user": "Hello", "bot": "Hi there! How can I help you today?"},
+        {"user": "Good morning", "bot": "Good morning! What’s up?"},
+    ],
+    "goodbye": [
+        {"user": "Bye", "bot": "Goodbye! Have a great day."},
+        {"user": "See you later", "bot": "See you!"},
+    ],
+    "help": [
+        {"user": "I need help", "bot": "Sure! What do you need help with?"},
+        {"user": "Can you assist me?", "bot": "Of course, happy to assist."},
+    ],
+    "faq": [
+        {"user": "What is RAG?", "bot": "RAG stands for Retrieval-Augmented Generation."},
+        {"user": "Who created this bot?", "bot": "It was built by our project team."},
+    ],
+}
+
+# -----------------------------
+# Utility
+# -----------------------------
+
+def get_system_prompt(mode: str = "base") -> str:
+    """
+    Return a system-level prompt string.
+    mode: "base" | "faq" | "support"
+    """
+    if mode == "faq":
+        return SYSTEM_FAQ
+    if mode == "support":
+        return SYSTEM_SUPPORT
+    return SYSTEM_BASE
+
+
+def get_few_shots(intent: str) -> list:
+    """
+    Return few-shot examples for a given intent label.
+    """
+    return FEW_SHOTS.get(intent, [])
+
+
+if __name__ == "__main__":
+    print("System prompt:", get_system_prompt("faq"))
+    print("Examples for 'greeting':", get_few_shots("greeting"))
 \n================================================================================\nEND FILE: nlu\prompts.py\n================================================================================\n\n================================================================================\nBEGIN FILE: nlu\router.py\n================================================================================\n\n# /nlu/router.py
+"""
+Lightweight NLU router.
+
+- Uses nlu.pipeline.analyze() to classify the user's intent.
+- Maps intents to high-level actions (GREETING, HELP, FAQ, ECHO, SUMMARIZE, GENERAL, GOODBYE).
+- Provides:
+    route(text, ctx=None)  -> dict with intent, action, handler, params
+    respond(text, history) -> quick deterministic reply for smoke tests
+
+This file deliberately avoids external dependencies so it works in anonymous mode.
+Later, you can swap 'handler' targets to real modules (e.g., anon_bot, logged_in_bot).
+"""
+
+from __future__ import annotations
+from dataclasses import dataclass, asdict
+from typing import Any, Dict, List, Optional, Tuple
+
+from .pipeline import analyze
+from .prompts import get_system_prompt, get_few_shots
+
+History = List[Tuple[str, str]]  # [("user","..."), ("bot","...")]
+
+# -----------------------------
+# Action / Route schema
+# -----------------------------
+
+@dataclass(frozen=True)
+class Route:
+    intent: str
+    action: str
+    handler: str                 # suggested dotted path or logical name
+    params: Dict[str, Any]       # arbitrary params (e.g., {"mode":"faq"})
+    confidence: float
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+# Intent -> (Action, Suggested Handler, Default Params)
+_ACTION_TABLE: Dict[str, Tuple[str, str, Dict[str, Any]]] = {
+    "greeting": ("GREETING",  "builtin.respond", {"mode": "base"}),
+    "goodbye":  ("GOODBYE",   "builtin.respond", {"mode": "base"}),
+    "help":     ("HELP",      "builtin.respond", {"mode": "support"}),
+    "faq":      ("FAQ",       "builtin.respond", {"mode": "faq"}),
+    # Sentiment intents come from pipeline; treat as GENERAL but note tag:
+    "sentiment_positive": ("GENERAL", "builtin.respond", {"mode": "base", "tag": "positive"}),
+    "sentiment_negative": ("GENERAL", "builtin.respond", {"mode": "base", "tag": "negative"}),
+    # Default:
+    "general":  ("GENERAL",   "builtin.respond", {"mode": "base"}),
+}
+
+_DEFAULT_ACTION = ("GENERAL", "builtin.respond", {"mode": "base"})
+
+
+# -----------------------------
+# Routing
+# -----------------------------
+
+def route(text: str, ctx: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Decide which action/handler should process the utterance.
+    """
+    nlu = analyze(text or "")
+    intent = nlu.get("intent", "general")
+    confidence = float(nlu.get("confidence", 0.0))
+    action, handler, params = _ACTION_TABLE.get(intent, _DEFAULT_ACTION)
+
+    # pass-through entities as params for downstream handlers
+    entities = nlu.get("entities") or []
+    if entities:
+        params = {**params, "entities": entities}
+
+    # include minimal context (optional)
+    if ctx:
+        params = {**params, "_ctx": ctx}
+
+    return Route(
+        intent=intent,
+        action=action,
+        handler=handler,
+        params=params,
+        confidence=confidence,
+    ).to_dict()
+
+
+# -----------------------------
+# Built-in deterministic responder (for smoke tests)
+# -----------------------------
+
+def respond(text: str, history: Optional[History] = None) -> str:
+    """
+    Produce a tiny, deterministic response using system/few-shot text.
+    This is only for local testing; replace with real handlers later.
+    """
+    r = route(text)
+    intent = r["intent"]
+    action = r["action"]
+    mode = r["params"].get("mode", "base")
+
+    # Choose a system flavor (not used to prompt a model here, but keeps wording consistent)
+    _ = get_system_prompt("support" if action == "HELP" else ("faq" if action == "FAQ" else "base"))
+    # Few-shots can inform canned replies (again: no model used, just tone)
+    shots = get_few_shots(intent)
+
+    if action == "GREETING":
+        return "Hi! How can I help you today?"
+    if action == "GOODBYE":
+        return "Goodbye! Have a great day."
+    if action == "HELP":
+        return "I can answer quick questions, echo text, or summarize short passages. What do you need help with?"
+    if action == "FAQ":
+        # Trivial FAQ-style echo; swap with RAG later
+        return "Ask a specific question (e.g., 'What is RAG?'), and I’ll answer briefly."
+    # GENERAL:
+    # If the pipeline flagged sentiment, acknowledge gently.
+    tag = r["params"].get("tag")
+    if tag == "positive":
+        prefix = "Glad to hear it! "
+    elif tag == "negative":
+        prefix = "Sorry to hear that. "
+    else:
+        prefix = ""
+    return prefix + "Noted. If you need help, type 'help'."
+
+# -----------------------------
+# Simple CLI smoke test
+# -----------------------------
+
+if __name__ == "__main__":
+    tests = [
+        "Hello there",
+        "Can you help me?",
+        "What is RAG in simple terms?",
+        "This is awful.",
+        "Bye!",
+        "random input with no keywords",
+    ]
+    for t in tests:
+        print(f"> {t}")
+        print(" route:", route(t))
+        print(" reply:", respond(t))
+        print()
 \n================================================================================\nEND FILE: nlu\router.py\n================================================================================\n\n================================================================================\nBEGIN FILE: notebooks\ChatbotIntegration.ipynb\n================================================================================\n\n# %% [code cell 1]\nfrom agenticcore.chatbot.services import ChatBot
 bot = ChatBot()
 print(bot.reply("Testing from notebook"))\n\n# %% [code cell 2]\nimport os
@@ -6502,21 +7805,32 @@ Duplicates from earlier skeletons were removed; priority order was:
 1) storefront_chatbot_final_bundle
 2) storefront_chatbot_merged_with_agentic
 3) storefront_chatbot_skeleton
-\n================================================================================\nEND FILE: README.md\n================================================================================\n\n================================================================================\nBEGIN FILE: requirements.txt\n================================================================================\n\ngradio>=4.0
-transformers>=4.41.0
+\n================================================================================\nEND FILE: README.md\n================================================================================\n\n================================================================================\nBEGIN FILE: requirements-dev.txt\n================================================================================\n\npytest>=7.4.0
+pytest-cov>=4.1.0
+black>=24.3.0
+isort>=5.13.0
+flake8>=7.0.0
+mypy>=1.10.0
+ruff>=0.5.0
+\n================================================================================\nEND FILE: requirements-dev.txt\n================================================================================\n\n================================================================================\nBEGIN FILE: requirements-ml.txt\n================================================================================\n\ntransformers>=4.41.0
 torch>=2.2.0
-scikit-learn>=1.3.0
-pandas>=2.1.0
-numpy>=1.26.0
-pytest>=7.4.0
-# Optional Azure
-azure-ai-textanalytics>=5.3.0
+
+# extras commonly required by transformers
+safetensors>=0.4.0
+accelerate>=0.33.0
+sentencepiece>=0.2.0
+\n================================================================================\nEND FILE: requirements-ml.txt\n================================================================================\n\n================================================================================\nBEGIN FILE: requirements.txt\n================================================================================\n\ngradio>=4.0,<5
+fastapi>=0.115.0,<0.116
+uvicorn[standard]>=0.30.0,<0.31
 python-dotenv>=1.0
-fastapi>=0.115.0
-uvicorn[standard]>=0.30.0
-# Optional for Bot Framework sample:
-# aiohttp>=3.9
-# botbuilder-core>=4.14
+
+# light numeric stack
+numpy>=1.26.0
+pandas>=2.1.0
+scikit-learn>=1.3.0
+
+# optional Azure integration
+azure-ai-textanalytics>=5.3.0
 \n================================================================================\nEND FILE: requirements.txt\n================================================================================\n\n================================================================================\nBEGIN FILE: samples\service.py\n================================================================================\n\n# /samples/services.py
 import os
 from typing import Dict, Any
@@ -6576,16 +7890,225 @@ class ChatBot:
     def _help_text() -> str:
         return "I analyze sentiment and respond concisely. Send any text or type 'help'."
 \n================================================================================\nEND FILE: samples\service.py\n================================================================================\n\n================================================================================\nBEGIN FILE: scripts\check_compliance.py\n================================================================================\n\n# /scripts/check_compliance.py
+#!/usr/bin/env python3
+"""
+Compliance checker for disallowed dependencies.
 
-# Fails if disallowed deps appear (placeholder)
+- Scans all .py files under project root (excluding venv/.git/etc).
+- Flags imports of disallowed packages (by prefix).
+- Exits nonzero if any violations are found.
+
+Run:
+    python scripts/check_compliance.py
+"""
+
+import sys
+import os
+import re
+from pathlib import Path
+
+# -----------------------------
+# Config
+# -----------------------------
+
+# Disallowed top-level import prefixes
+DISALLOWED = {
+    "torch",
+    "tensorflow",
+    "transformers",
+    "openai",
+    "azure.ai",       # heavy cloud SDK
+    "azureml",
+    "boto3",
+    "botbuilder",     # Microsoft Bot Framework
+}
+
+IGNORE_DIRS = {".git", "__pycache__", "venv", ".venv", "env", ".env", "node_modules"}
+
+IMPORT_RE = re.compile(r"^\s*(?:import|from)\s+([a-zA-Z0-9_.]+)")
+
+# -----------------------------
+# Scan
+# -----------------------------
+
+def scan_file(path: Path) -> list[str]:
+    bad = []
+    try:
+        lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except Exception as e:
+        print(f"[warn] could not read {path}: {e}", file=sys.stderr)
+        return []
+    for i, line in enumerate(lines, 1):
+        m = IMPORT_RE.match(line)
+        if not m:
+            continue
+        mod = m.group(1)
+        for banned in DISALLOWED:
+            if mod == banned or mod.startswith(banned + "."):
+                bad.append(f"{path}:{i}: disallowed import '{mod}'")
+    return bad
+
+
+def main(root: str = ".") -> int:
+    root = Path(root)
+    failures: list[str] = []
+
+    for p in root.rglob("*.py"):
+        if any(part in IGNORE_DIRS for part in p.parts):
+            continue
+        failures.extend(scan_file(p))
+
+    if failures:
+        print("❌ Compliance check failed:")
+        for f in failures:
+            print("  ", f)
+        return 1
+    else:
+        print("✅ Compliance check passed (no disallowed deps).")
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
 \n================================================================================\nEND FILE: scripts\check_compliance.py\n================================================================================\n\n================================================================================\nBEGIN FILE: scripts\run_local.sh\n================================================================================\n\n# /scripts/run_local.sh
 #!/usr/bin/env bash
-set -euo pipefail
-export PYTHONPATH=.
-python -c "from storefront_chatbot.app.app import build; build().launch(server_name='0.0.0.0', server_port=7860)"
-\n================================================================================\nEND FILE: scripts\run_local.sh\n================================================================================\n\n================================================================================\nBEGIN FILE: scripts\seed_data.py\n================================================================================\n\n# /scripts/seed_data.py
-# Load sample products/FAQs (placeholder)
+set -Eeuo pipefail
 
+# Move to repo root
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+# --- Configuration via env (with sane defaults) ---
+export PYTHONPATH="${PYTHONPATH:-.}"
+HOST="${HOST:-0.0.0.0}"
+PORT="${PORT:-7860}"
+MODE="${MODE:-gradio}"   # gradio | uvicorn
+RELOAD="${RELOAD:-false}" # only applies to MODE=uvicorn
+INSTALL="${INSTALL:-0}"   # set INSTALL=1 to pip install requirements
+
+# Load .env if present (ignore comments/blank lines)
+if [[ -f .env ]]; then
+  # shellcheck disable=SC2046
+  export $(grep -vE '^\s*#' .env | grep -vE '^\s*$' | xargs -0 -I{} bash -c 'printf "%s\0" "{}"' 2>/dev/null || true)
+fi
+
+if [[ "$INSTALL" == "1" ]]; then
+  echo "📦 Installing dependencies from requirements.txt ..."
+  python -m pip install -r requirements.txt
+fi
+
+trap 'echo; echo "⛔ Server terminated";' INT TERM
+
+if [[ "$MODE" == "uvicorn" ]]; then
+  # Dev-friendly server with optional reload (expects FastAPI app factory)
+  echo "▶ Starting Uvicorn on http://${HOST}:${PORT}  (reload=${RELOAD})"
+  # If you expose a FastAPI app object directly, adjust target accordingly (e.g., storefront_chatbot.app.app:app)
+  cmd=(python -m uvicorn storefront_chatbot.app.app:build --host "$HOST" --port "$PORT")
+  [[ "$RELOAD" == "true" ]] && cmd+=(--reload)
+  exec "${cmd[@]}"
+else
+  # Gradio path (matches your original build().launch)
+  echo "▶ Starting Gradio on http://${HOST}:${PORT}"
+  python - <<PY
+from storefront_chatbot.app.app import build
+app = build()
+app.launch(server_name="${HOST}", server_port=${PORT})
+PY
+fi
+\n================================================================================\nEND FILE: scripts\run_local.sh\n================================================================================\n\n================================================================================\nBEGIN FILE: scripts\seed_data.py\n================================================================================\n\n# /scripts/seed_data.py
+#!/usr/bin/env python3
+"""
+Seed script to load sample products and FAQs into local data files.
+
+- Creates ./data/products.json and ./data/faqs.json
+- Provides a CLI to re-seed or show contents
+- No external dependencies required
+
+Run:
+    python scripts/seed_data.py         # create seed files
+    python scripts/seed_data.py show    # print contents
+"""
+
+import sys
+import json
+from pathlib import Path
+import datetime
+
+ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = ROOT / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+PRODUCTS_PATH = DATA_DIR / "products.json"
+FAQS_PATH = DATA_DIR / "faqs.json"
+
+
+SAMPLE_PRODUCTS = [
+    {
+        "id": "p1",
+        "name": "Chatbot Pro Subscription",
+        "description": "Access advanced features of the chatbot platform.",
+        "price": 9.99,
+        "currency": "USD",
+        "tags": ["subscription", "chatbot"],
+    },
+    {
+        "id": "p2",
+        "name": "Custom Bot Avatar",
+        "description": "A personalized avatar for your chatbot.",
+        "price": 4.99,
+        "currency": "USD",
+        "tags": ["avatar", "customization"],
+    },
+    {
+        "id": "p3",
+        "name": "Analytics Dashboard",
+        "description": "Real-time analytics and reporting for your conversations.",
+        "price": 14.99,
+        "currency": "USD",
+        "tags": ["analytics", "dashboard"],
+    },
+]
+
+SAMPLE_FAQS = [
+    {
+        "q": "How do I reset my password?",
+        "a": "Click 'Forgot password' on the login page and follow the instructions.",
+    },
+    {
+        "q": "Can I export my chat history?",
+        "a": "Yes, you can export your chat history from the account settings page.",
+    },
+    {
+        "q": "Do you offer refunds?",
+        "a": "Refunds are available within 14 days of purchase. Contact support for help.",
+    },
+]
+
+
+def write_json(path: Path, data) -> None:
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def seed() -> None:
+    write_json(PRODUCTS_PATH, SAMPLE_PRODUCTS)
+    write_json(FAQS_PATH, SAMPLE_FAQS)
+    print(f"✅ Seeded data at {datetime.date.today()} into {DATA_DIR}")
+
+
+def show() -> None:
+    if PRODUCTS_PATH.is_file():
+        print("Products:")
+        print(PRODUCTS_PATH.read_text(encoding="utf-8"))
+    if FAQS_PATH.is_file():
+        print("\nFAQs:")
+        print(FAQS_PATH.read_text(encoding="utf-8"))
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "show":
+        show()
+    else:
+        seed()
 \n================================================================================\nEND FILE: scripts\seed_data.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tests\smoke_test.py\n================================================================================\n\n# /test/smoke_test.py
 import os, json, requests
 from agenticcore.chatbot.services import ChatBot
@@ -6599,10 +8122,166 @@ url = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
 r = requests.get(f"{url}/health"); p("API/Health", r.json())
 r = requests.post(f"{url}/chatbot/message", json={"message":"api path test"}); p("API/Chat", r.json())
 \n================================================================================\nEND FILE: tests\smoke_test.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tests\test_anon_bot.py\n================================================================================\n\n# /test/test_anon_bot.py
-def test_anon_stub(): assert True
+"""
+Comprehensive smoke tests for anon_bot.
+Run with:  pytest -q
+"""
+
+import pytest
+from anon_bot import handler, rules
+
+
+# ---------- rules: intents & handlers ----------
+
+@pytest.mark.parametrize(
+    "msg,expected",
+    [
+        ("", "empty"),
+        ("help", "help"),
+        ("/help", "help"),
+        ("capabilities", "help"),
+        ("reverse abc", "reverse"),
+        ("echo hello world", "echo"),
+        ("hi", "greet"),
+        ("hello", "greet"),
+        ("hey", "greet"),
+        ("who are you", "chat"),
+    ],
+)
+def test_rules_intent_of(msg, expected):
+    assert rules.intent_of(msg) == expected
+
+
+def test_rules_capabilities_contains_expected_items():
+    caps = rules.capabilities()
+    assert "help" in caps
+    assert any(c.startswith("reverse") for c in caps)
+    assert any(c.startswith("echo") for c in caps)
+
+
+def test_rules_handlers_basic():
+    assert "I can:" in rules.handle_help().text
+    assert rules.handle_reverse("reverse hello").text == "olleh"
+    assert rules.handle_reverse("reverse").text == "(nothing to reverse)"
+    assert rules.handle_echo("echo one two").text == "one two"
+    assert rules.handle_echo("echo").text == "(nothing to echo)"
+    assert "Type 'help'" in rules.handle_greet().text
+
+
+def test_rules_reply_for_empty_and_chat_paths():
+    r = rules.reply_for("", [])
+    assert "Please type something" in r.text
+
+    r2 = rules.reply_for("who are you", [])
+    assert "tiny anonymous chatbot" in r2.text
+
+    r3 = rules.reply_for("can you help me", [])
+    assert "I can:" in r3.text  # chat fallback detects 'help' and returns help
+
+
+# ---------- handler: history & turn processing ----------
+
+def test_handle_turn_appends_user_and_bot():
+    hist = []
+    out = handler.handle_turn("hello", hist, user=None)
+    # last two entries should be ("user", ...), ("bot", ...)
+    assert out[-2][0] == "user" and out[-2][1] == "hello"
+    assert out[-1][0] == "bot" and "Type 'help'" in out[-1][1]
+
+
+def test_handle_turn_with_existing_history_preserves_items():
+    h2 = [("user", "prev"), ("bot", "ok")]
+    out2 = handler.handle_turn("echo ping", h2, user=None)
+    assert out2[:2] == h2  # preserved
+    assert out2[-1][0] == "bot"
+    assert out2[-1][1] == "ping"  # echo payload
+
+
+def test_handle_text_convenience():
+    reply = handler.handle_text("reverse abc")
+    assert reply == "cba"
+
+
+def test_handle_turn_empty_message_produces_prompt():
+    out = handler.handle_turn("", [], user=None)
+    assert out[-1][0] == "bot"
+    assert "Please type" in out[-1][1]
+
+
+def test_handler_coerces_weird_history_without_crashing():
+    # Mix of tuples, lists, malformed entries, and non-iterables
+    weird = [
+        ("user", "ok"),
+        ["bot", "fine"],
+        "garbage",
+        ("only_one_element",),
+        ("user", 123),
+        42,
+        None,
+    ]
+    out = handler.handle_turn("hi", weird, user=None)
+    # Should include a normalized user entry and a bot reply at the end
+    assert out[-2] == ("user", "hi")
+    assert out[-1][0] == "bot"
+
+
+# ---------- end-to-end mini scriptable checks ----------
+
+def test_greet_help_echo_reverse_flow():
+    h = []
+    h = handler.handle_turn("hi", h, None)
+    assert "help" in h[-1][1].lower()
+
+    h = handler.handle_turn("help", h, None)
+    assert "I can:" in h[-1][1]
+
+    h = handler.handle_turn("echo alpha beta", h, None)
+    assert h[-1][1] == "alpha beta"
+
+    h = handler.handle_turn("reverse zed", h, None)
+    assert h[-1][1] == "dez"
+
 
 \n================================================================================\nEND FILE: tests\test_anon_bot.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tests\test_guardrails.py\n================================================================================\n\n# /test/test_guardrails.py
-def test_guardrails_stub(): assert True
+"""
+Guardrail tests:
+- Ensure compliance checker passes (no disallowed deps imported).
+- Ensure anon_bot.rules doesn't produce unsafe replies for empty / bad input.
+"""
+
+import subprocess
+import sys
+import pathlib
+
+import pytest
+
+from anon_bot import rules
+
+
+def test_compliance_script_runs_clean():
+    root = pathlib.Path(__file__).resolve().parent.parent
+    script = root / "scripts" / "check_compliance.py"
+    # Run as a subprocess so we catch real exit code
+    proc = subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
+    # If it fails, dump output for debugging
+    if proc.returncode != 0:
+        print(proc.stdout)
+        print(proc.stderr, file=sys.stderr)
+    assert proc.returncode == 0
+
+
+@pytest.mark.parametrize("msg", ["", None, "   "])
+def test_rules_empty_prompts_are_safe(msg):
+    r = rules.reply_for(msg or "", [])
+    # Should politely nudge the user, not crash
+    assert "Please" in r.text or "help" in r.text.lower()
+
+
+@pytest.mark.parametrize("msg", ["rm -rf /", "DROP TABLE users;"])
+def test_rules_handles_malicious_looking_input(msg):
+    r = rules.reply_for(msg, [])
+    # The bot should fall back safely to generic chat response
+    assert "Noted" in r.text or "help" in r.text
 \n================================================================================\nEND FILE: tests\test_guardrails.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tests\test_indexer.py\n================================================================================\n\n# /tests/test_indexer.py
 from pathlib import Path
 from memory.rag.data.indexer import TfidfIndex, search, DEFAULT_INDEX_PATH
@@ -6628,11 +8307,230 @@ def __meta(i: str):
     from memory.rag.data.indexer import DocMeta
     return DocMeta(doc_id=i, source="inline", title=i)
 \n================================================================================\nEND FILE: tests\test_indexer.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tests\test_logged_in_bot.py\n================================================================================\n\n# /test/test_logged_in_bot.py
-def test_logged_stub(): assert True
+"""
+Tests for logged_in_bot.tools (no Azure required).
+Run: pytest -q
+"""
+
+import os
+import pytest
+
+from logged_in_bot import tools as L
+
+
+def test_help_route_and_reply():
+    resp = L.handle_logged_in_turn("help", history=[], user=None)
+    assert isinstance(resp, dict)
+    assert "I can:" in resp["reply"]
+    assert resp["meta"]["intent"] == "help"
+    assert "sentiment" in resp["meta"]  # attached even in help path
+
+
+def test_echo_payload():
+    resp = L.handle_logged_in_turn("echo hello world", history=[], user=None)
+    assert resp["reply"] == "hello world"
+    assert resp["meta"]["intent"] == "echo"
+
+
+def test_summarize_uses_first_sentence():
+    text = "This is the first sentence. This is the second sentence."
+    resp = L.handle_logged_in_turn(f"summarize {text}", history=[], user=None)
+    # naive summarizer returns the first sentence (possibly truncated)
+    assert "first sentence" in resp["reply"]
+    assert resp["meta"]["intent"] == "summarize"
+    assert "sentiment" in resp["meta"]  # sentiment computed on source text
+
+
+def test_empty_input_prompts_user():
+    resp = L.handle_logged_in_turn("", history=[], user=None)
+    assert "Please type" in resp["reply"]
+    assert resp["meta"]["intent"] == "empty"
+
+
+def test_general_chat_fallback_and_sentiment():
+    resp = L.handle_logged_in_turn("I love this project!", history=[], user=None)
+    assert isinstance(resp["reply"], str) and len(resp["reply"]) > 0
+    # sentiment present; backend may be "local" or "none" depending on env
+    sent = resp["meta"].get("sentiment", {})
+    assert sent.get("label") in {"positive", "neutral", "negative", None}
+
+
+def test_optional_redaction_is_honored(monkeypatch):
+    # Monkeypatch optional redactor to simulate PII masking
+    monkeypatch.setattr(L, "pii_redact", lambda s: s.replace("555-1234", "[REDACTED]"), raising=False)
+    resp = L.handle_logged_in_turn("echo call me at 555-1234", history=[], user=None)
+    assert resp["meta"]["redacted"] is True
+    assert resp["reply"] == "call me at [REDACTED]"
+
+
+def test_input_length_cap(monkeypatch):
+    # Cap input length to 10 chars; ensure ellipsis added
+    monkeypatch.setenv("MAX_INPUT_CHARS", "10")
+    long = "echo 1234567890ABCDEFGHIJ"
+    resp = L.handle_logged_in_turn(long, history=[], user=None)
+    # reply is payload of redacted/sanitized text; should end with ellipsis
+    assert resp["reply"].endswith("…") or resp["reply"].endswith("...")  # handle different ellipsis if changed
+
+
+def test_history_pass_through_shape():
+    # History should be accepted and not crash; we don't deeply inspect here
+    hist = [("user", "prev"), ("bot", "ok")]
+    resp = L.handle_logged_in_turn("echo ping", history=hist, user={"id": "u1"})
+    assert resp["reply"] == "ping"
+    assert isinstance(resp["meta"], dict)
+
+
+@pytest.mark.parametrize("msg,expected_intent", [
+    ("help", "help"),
+    ("echo abc", "echo"),
+    ("summarize One. Two.", "summarize"),
+    ("random chat", "chat"),
+])
+def test_intent_detection_smoke(msg, expected_intent):
+    r = L.handle_logged_in_turn(msg, history=[], user=None)
+    assert r["meta"]["intent"] == expected_intent
+
 \n================================================================================\nEND FILE: tests\test_logged_in_bot.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tests\test_memory.py\n================================================================================\n\n# /test/test_memory.py
-def test_memory_stub(): assert True
+"""
+Tests for memory.sessions
+Run: pytest -q
+"""
+
+import time
+from pathlib import Path
+
+from memory import sessions as S
+
+
+def test_create_and_append_history():
+    store = S.SessionStore(ttl_seconds=None, max_history=10)
+    sess = store.create(user_id="u1")
+    assert sess.session_id
+    sid = sess.session_id
+
+    store.append_user(sid, "hello")
+    store.append_bot(sid, "hi there")
+    hist = store.get_history(sid)
+    assert hist == [("user", "hello"), ("bot", "hi there")]
+
+    # ensure timestamps update
+    before = sess.updated_at
+    store.append_user(sid, "next")
+    assert store.get(sid).updated_at >= before
+
+
+def test_max_history_cap():
+    store = S.SessionStore(ttl_seconds=None, max_history=3)
+    s = store.create()
+    sid = s.session_id
+
+    # 4 appends → only last 3 kept
+    store.append_user(sid, "a")
+    store.append_bot(sid, "b")
+    store.append_user(sid, "c")
+    store.append_bot(sid, "d")
+    hist = store.get_history(sid)
+    assert hist == [("bot", "b"), ("user", "c"), ("bot", "d")]
+
+
+def test_ttl_sweep_expires_old_sessions():
+    store = S.SessionStore(ttl_seconds=0)  # expire immediately
+    s1 = store.create()
+    s2 = store.create()
+    # Nudge updated_at into the past
+    store._sessions[s1.session_id].updated_at -= 10
+    store._sessions[s2.session_id].updated_at -= 10
+
+    removed = store.sweep()
+    assert removed >= 1
+    # After sweep, remaining sessions (if any) must be fresh
+    for sid in store.all_ids():
+        assert not store._expired(store.get(sid))
+
+
+def test_key_value_store_helpers():
+    store = S.SessionStore(ttl_seconds=None)
+    s = store.create()
+    sid = s.session_id
+
+    store.set(sid, "mode", "anonymous")
+    store.set(sid, "counter", 1)
+    assert store.get_value(sid, "mode") == "anonymous"
+    assert store.data_dict(sid)["counter"] == 1
+
+    # get_value default
+    assert store.get_value(sid, "missing", default="x") == "x"
+
+
+def test_persistence_save_and_load(tmp_path: Path):
+    p = tmp_path / "sess.json"
+
+    st1 = S.SessionStore(ttl_seconds=None)
+    s = st1.create(user_id="uX")
+    st1.append_user(s.session_id, "hello")
+    st1.append_bot(s.session_id, "hi")
+    st1.save(p)
+
+    st2 = S.SessionStore.load(p)
+    hist2 = st2.get_history(s.session_id)
+    assert hist2 == [("user", "hello"), ("bot", "hi")]
+    assert st2.get(s.session_id).user_id == "uX"
+
+
+def test_module_level_singleton_and_helpers():
+    s = S.new_session(user_id="alice")
+    sid = s.session_id
+    S.append_user(sid, "hey")
+    S.append_bot(sid, "hello!")
+    assert S.history(sid)[-2:] == [("user", "hey"), ("bot", "hello!")]
+    S.set_value(sid, "flag", True)
+    assert S.get_value(sid, "flag") is True
 \n================================================================================\nEND FILE: tests\test_memory.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tests\test_nlu.py\n================================================================================\n\n# /test/test_nlu.py
-def test_nlu_stub(): assert True
+"""
+Basic tests for the NLU pipeline and router.
+Run with:  pytest -q
+"""
+
+import pytest
+
+from nlu import pipeline, router
+
+
+def test_pipeline_greeting():
+    out = pipeline.analyze("Hello there")
+    assert out["intent"] == "greeting"
+    assert out["confidence"] > 0.5
+
+
+def test_pipeline_general():
+    out = pipeline.analyze("completely random utterance")
+    assert out["intent"] == "general"
+    assert "entities" in out
+
+
+def test_router_route_and_respond():
+    # Route a help query
+    r = router.route("Can you help me?")
+    assert r["intent"] == "help"
+    assert r["action"] == "HELP"
+
+    reply = router.respond("Can you help me?")
+    assert isinstance(reply, str)
+    assert "help" in reply.lower()
+
+
+def test_router_sentiment_positive():
+    r = router.route("I love this bot!")
+    assert r["intent"] == "sentiment_positive"
+    reply = router.respond("I love this bot!")
+    assert "glad" in reply.lower() or "hear" in reply.lower()
+
+
+def test_router_goodbye():
+    r = router.route("bye")
+    assert r["action"] == "GOODBYE"
+    reply = router.respond("bye")
+    assert "goodbye" in reply.lower()
 \n================================================================================\nEND FILE: tests\test_nlu.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tests\test_retriever.py\n================================================================================\n\n# tests/test_retriever.py
 from pathlib import Path
 from memory.rag.data.indexer import TfidfIndex, DocMeta
@@ -6695,7 +8593,7 @@ def test_save_load(tmp_path):
     st.save(p)
     st2 = SessionStore.load(p)
     assert st2.get_history(s.session_id)[0] == ("user","hello")
-\n================================================================================\nEND FILE: tests\test_sessions.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tools\quick_sanity.py\n================================================================================\n\n# tools/quick_sanity.py
+\n================================================================================\nEND FILE: tests\test_sessions.py\n================================================================================\n\n================================================================================\nBEGIN FILE: tools\quick_sanity.py\n================================================================================\n\n# /tools/quick_sanity.py
 """
 Tiny sanity test for MBF helpers. Run from repo root or set PYTHONPATH.
 """
@@ -6721,9 +8619,6 @@ print("cmd:", normalize("  Help  "))
 │   ├── handler.py
 │   └── rules.py
 ├── app
-│   ├── app
-│   │   ├── app.py
-│   │   └── routes.py
 │   ├── assets
 │   │   └── html
 │   │       ├── agenticcore_frontend.html
@@ -6731,6 +8626,20 @@ print("cmd:", normalize("  Help  "))
 │   │       ├── chat_console.html
 │   │       └── chat_minimal.html
 │   ├── components
+│   │   ├── __init__.py
+│   │   ├── Card.py
+│   │   ├── ChatHistory.py
+│   │   ├── ChatInput.py
+│   │   ├── ChatMessage.py
+│   │   ├── ErrorBanner.py
+│   │   ├── FAQViewer.py
+│   │   ├── Footer.py
+│   │   ├── Header.py
+│   │   ├── LoadingSpinner.py
+│   │   ├── LoginBadge.py
+│   │   ├── ProductCard.py
+│   │   ├── Sidebar.py
+│   │   └── StatusBadge.py
 │   ├── mbf_bot
 │   │   ├── __init__.py
 │   │   ├── bot.py
@@ -6746,9 +8655,9 @@ print("cmd:", normalize("  Help  "))
 │   ├── architecture.md
 │   ├── design.md
 │   ├── DEV_DOC.md
-│   ├── flowchart.png
 │   └── results.md
 ├── examples
+│   ├── example-dev.py
 │   └── example.py
 ├── guardrails
 │   ├── pii_redaction.py
@@ -6794,20 +8703,24 @@ print("cmd:", normalize("  Help  "))
 │   ├── smoke_test.py
 │   ├── test_anon_bot.py
 │   ├── test_guardrails.py
+│   ├── test_indexer.py
 │   ├── test_logged_in_bot.py
 │   ├── test_memory.py
 │   ├── test_nlu.py
-│   └── test_routes.py
+│   ├── test_retriever.py
+│   ├── test_routes.py
+│   └── test_sessions.py
 ├── tools
 │   └── quick_sanity.py
 ├── .gitignore
-├── app.zip
 ├── flat_tree_filter.py
 ├── FLATTENED_CODE.txt
 ├── LICENSE
 ├── Makefile
 ├── pyproject.toml
 ├── README.md
+├── requirements-dev.txt
+├── requirements-ml.txt
 ├── requirements.txt
 ├── tree.txt
 └── tree_filter.py

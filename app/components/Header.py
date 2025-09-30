@@ -1,4 +1,4 @@
-# app/components/Header.py
+# /app/components/Header.py
 import gradio as gr
 from html import escape
 

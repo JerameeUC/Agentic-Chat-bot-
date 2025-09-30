@@ -1,4 +1,4 @@
-# integrations/azure/bot_framework.py
+# /integrations/azure/bot_framework.py
 """
 Azure Bot Framework integration (stub).
 

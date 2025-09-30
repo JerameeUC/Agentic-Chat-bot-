@@ -18,6 +18,20 @@ C:\Users\User\Agentic-Chat-bot-
 │   │       ├── chat_console.html
 │   │       └── chat_minimal.html
 │   ├── components
+│   │   ├── __init__.py
+│   │   ├── Card.py
+│   │   ├── ChatHistory.py
+│   │   ├── ChatInput.py
+│   │   ├── ChatMessage.py
+│   │   ├── ErrorBanner.py
+│   │   ├── FAQViewer.py
+│   │   ├── Footer.py
+│   │   ├── Header.py
+│   │   ├── LoadingSpinner.py
+│   │   ├── LoginBadge.py
+│   │   ├── ProductCard.py
+│   │   ├── Sidebar.py
+│   │   └── StatusBadge.py
 │   ├── mbf_bot
 │   │   ├── __init__.py
 │   │   ├── bot.py
@@ -35,6 +49,7 @@ C:\Users\User\Agentic-Chat-bot-
 │   ├── DEV_DOC.md
 │   └── results.md
 ├── examples
+│   ├── example-dev.py
 │   └── example.py
 ├── guardrails
 │   ├── pii_redaction.py
@@ -90,13 +105,14 @@ C:\Users\User\Agentic-Chat-bot-
 ├── tools
 │   └── quick_sanity.py
 ├── .gitignore
-├── app.zip
 ├── flat_tree_filter.py
 ├── FLATTENED_CODE.txt
 ├── LICENSE
 ├── Makefile
 ├── pyproject.toml
 ├── README.md
+├── requirements-dev.txt
+├── requirements-ml.txt
 ├── requirements.txt
 ├── tree.txt
 └── tree_filter.py

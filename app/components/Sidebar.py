@@ -1,4 +1,4 @@
-# app/components/Sidebar.py
+# /app/components/Sidebar.py
 import gradio as gr
 
 def build_sidebar():

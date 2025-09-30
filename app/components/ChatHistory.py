@@ -1,4 +1,4 @@
-# app/components/ChatHistory.py
+# /app/components/ChatHistory.py
 from __future__ import annotations
 from typing import List, Tuple
 import gradio as gr

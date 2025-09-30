@@ -1,3 +1,4 @@
+# /app/app.py
 #!/usr/bin/env python3
 # app.py — aiohttp + Bot Framework; optional Gradio UI mode via APP_MODE=gradio
 

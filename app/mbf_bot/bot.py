@@ -1,4 +1,4 @@
-# /app/bot.py
+# /app/mbf_bot/bot.py
 """
 Simple MBF bot:
 - 'help' / 'capabilities' shows features

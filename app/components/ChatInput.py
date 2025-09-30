@@ -1,4 +1,4 @@
-# app/components/ChatInput.py
+# /app/components/ChatInput.py
 from __future__ import annotations
 import gradio as gr
 
