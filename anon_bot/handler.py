@@ -40,3 +40,21 @@ def handle_text(message: str, history: History | None = None) -> str:
     new_hist = handle_turn(message, history, user=None)
     # last item is bot reply
     return new_hist[-1][1] if new_hist else ""
+
+def handle_logged_in_turn(message, history=None, user=None):
+    history = history or []
+    try:
+        res = _bot.reply(message)
+        reply = res.get("reply") or "Noted."
+        meta = {
+            "intent": res.get("intent", "general"),
+            "input_len": len(message or ""),
+            "redacted": res.get("redacted", False),
+            "sentiment": res.get("sentiment", "neutral"),
+            "confidence": float(res.get("confidence", 1.0)),
+        }
+    except Exception as e:
+        reply = f"Sorry—error in ChatBot: {type(e).__name__}."
+        meta = {"intent": "error", "input_len": len(message or ""), "redacted": False,
+                "sentiment": "neutral", "confidence": 0.0}
+    return {"reply": reply, "meta": meta}

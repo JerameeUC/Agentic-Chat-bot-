@@ -56,16 +56,19 @@ _DEFAULT_ACTION = ("GENERAL", "builtin.respond", {"mode": "base"})
 # -----------------------------
 # Routing
 # -----------------------------
-
-def route(text: str, ctx: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """
-    Decide which action/handler should process the utterance.
-    """
+def route(text: str, ctx=None) -> Dict[str, Any]:
     nlu = analyze(text or "")
     intent = nlu.get("intent", "general")
     confidence = float(nlu.get("confidence", 0.0))
     action, handler, params = _ACTION_TABLE.get(intent, _DEFAULT_ACTION)
 
+    # Override with simple sentiment keywords
+    t = (text or "").lower()
+    if any(word in t for word in ["love", "great", "awesome", "amazing"]):
+        intent = "sentiment_positive"
+    elif any(word in t for word in ["hate", "awful", "terrible", "bad"]):
+        intent = "sentiment_negative"
+    
     # pass-through entities as params for downstream handlers
     entities = nlu.get("entities") or []
     if entities:

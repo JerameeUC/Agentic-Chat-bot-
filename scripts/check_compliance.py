@@ -40,6 +40,17 @@ IMPORT_RE = re.compile(r"^\s*(?:import|from)\s+([a-zA-Z0-9_.]+)")
 # Scan
 # -----------------------------
 
+def _supports_utf8():
+    enc = (sys.stdout.encoding or "").lower()
+    return "utf-8" in enc
+
+FAIL_MARK = "FAIL:" if not _supports_utf8() else "❌"
+PASS_MARK = "OK:"   if not _supports_utf8() else "✅"
+
+# then use:
+print(f"{FAIL_MARK} Compliance check failed:")
+print(f"{PASS_MARK} Compliance check passed (no disallowed deps).")
+
 def scan_file(path: Path) -> list[str]:
     bad = []
     try:

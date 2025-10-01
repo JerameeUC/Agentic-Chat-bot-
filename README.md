@@ -108,14 +108,4 @@ pytest -q
 
 ---
 
-## Project Context
-
-This is the **unified storefront-chatbot bundle**. Earlier skeletons were merged and duplicates removed.  
-Priority order:  
-1. `storefront_chatbot_final_bundle`  
-2. `storefront_chatbot_merged_with_agentic`  
-3. `storefront_chatbot_skeleton`
-
----
-
 _Developed for MSAI 631 – Human-Computer Interaction Group Project._

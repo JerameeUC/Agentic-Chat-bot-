@@ -1,6 +1,6 @@
 # /agenticcore/web_agentic.py
-from fastapi import FastAPI, Query
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi import FastAPI, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles  # <-- ADD THIS
 from agenticcore.chatbot.services import ChatBot
 import pathlib
@@ -44,8 +44,24 @@ app.mount("/static", StaticFiles(directory=assets_path_str), name="static")
 # Serve /favicon.ico (browsers request this path)
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
-    png = assets_path / "favicon.ico"
+    ico = assets_path / "favicon.ico"
+    png = assets_path / "favicon.png"
+    if ico.exists():
+        return FileResponse(str(ico), media_type="image/x-icon")
     if png.exists():
-        return FileResponse(str(ico), media_type="image/ico")
-    # Graceful fallback: return an empty 204 if icon missing
-    return HTMLResponse(status_code=204, content="")
+        return FileResponse(str(png), media_type="image/png")
+    # Graceful fallback if no icon present
+    return Response(status_code=204)
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+@app.post("/chatbot/message")
+async def chatbot_message(request: Request):
+    payload = await request.json()
+    msg = str(payload.get("message", "")).strip()
+    if not msg:
+        msg = "help"
+    return ChatBot().reply(msg)
