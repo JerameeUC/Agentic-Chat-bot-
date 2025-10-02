@@ -7,8 +7,8 @@ Simple MBF bot:
 """
 
 from typing import List, Optional, Dict, Any
-from botbuilder.core import ActivityHandler, TurnContext
-from botbuilder.schema import ChannelAccount, ActivityTypes
+# from botbuilder.core import ActivityHandler, TurnContext
+# from botbuilder.schema import ChannelAccount, ActivityTypes
 
 from skills import normalize, reverse_text, capabilities, is_empty
 

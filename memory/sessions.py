@@ -242,3 +242,13 @@ def get_value(session_id: str, key: str, default: Any = None) -> Any:
 
 def sweep() -> int:
     return get_store().sweep()
+
+@classmethod
+def default(cls) -> "SessionStore":
+    """
+    Convenience singleton used by tests (SessionStore.default()).
+    Delegates to the module-level get_store() to share the same instance.
+    """
+    # get_store is defined at module scope below; resolved at call time.
+    from .sessions import get_store  # type: ignore
+    return get_store()

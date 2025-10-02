@@ -16,7 +16,9 @@ C:\Users\User\Agentic-Chat-bot-
 │   │       ├── agenticcore_frontend.html
 │   │       ├── chat.html
 │   │       ├── chat_console.html
-│   │       └── chat_minimal.html
+│   │       ├── chat_minimal.html
+│   │       ├── favicon.ico
+│   │       └── favicon.png
 │   ├── components
 │   │   ├── __init__.py
 │   │   ├── Card.py
@@ -36,22 +38,40 @@ C:\Users\User\Agentic-Chat-bot-
 │   │   ├── __init__.py
 │   │   ├── bot.py
 │   │   └── skills.py
+│   ├── __init__.py
 │   ├── app.py
+│   ├── app_backup.py
+│   ├── main.py
 │   └── routes.py
+├── backend
+│   ├── app
+│   │   ├── __init__.py
+│   │   └── main.py
+│   └── __init__.py
 ├── core
+│   ├── __init__.py
 │   ├── config.py
 │   ├── logging.py
 │   └── types.py
 ├── docs
+│   ├── favicon_bundle
+│   │   ├── favicon.ico
+│   │   └── favicon.png
 │   ├── slides
+│   ├── Agentic_Chatbot_Dev_Build_Test.docx
 │   ├── architecture.md
 │   ├── design.md
 │   ├── DEV_DOC.md
+│   ├── Developer_Guide_Build_Test.md
+│   ├── favicon.png~
+│   ├── favicon_bundle.zip
 │   └── results.md
 ├── examples
+│   ├── __init__.py
 │   ├── example-dev.py
 │   └── example.py
 ├── guardrails
+│   ├── __init__.py
 │   ├── pii_redaction.py
 │   └── safety.py
 ├── integrations
@@ -64,21 +84,29 @@ C:\Users\User\Agentic-Chat-bot-
 │   │   └── bot.py
 │   ├── email
 │   │   └── ticket_stub.py
-│   └── web
-│       └── fastapi
-│           └── web_agentic.py
+│   ├── web
+│   │   └── fastapi
+│   │       └── web_agentic.py
+│   └── __init__.py
 ├── logged_in_bot
+│   ├── __init__.py
 │   ├── handler.py
 │   ├── sentiment_azure.py
 │   └── tools.py
 ├── memory
+│   ├── .profiles
 │   ├── rag
 │   │   ├── data
+│   │   │   └── indexer.py
+│   │   ├── __init__.py
 │   │   ├── indexer.py
 │   │   └── retriever.py
+│   ├── __init__.py
+│   ├── profile.py
 │   ├── sessions.py
 │   └── store.py
 ├── nlu
+│   ├── __init__.py
 │   ├── pipeline.py
 │   ├── prompts.py
 │   └── router.py
@@ -89,6 +117,12 @@ C:\Users\User\Agentic-Chat-bot-
 │   └── service.py
 ├── scripts
 │   ├── check_compliance.py
+│   ├── run_backend.bat
+│   ├── run_backend.ps1
+│   ├── run_fastapi.bat
+│   ├── run_fastapi.ps1
+│   ├── run_gradio.bat
+│   ├── run_gradio.ps1
 │   ├── run_local.sh
 │   └── seed_data.py
 ├── tests
@@ -103,12 +137,14 @@ C:\Users\User\Agentic-Chat-bot-
 │   ├── test_routes.py
 │   └── test_sessions.py
 ├── tools
+│   ├── __init__.py
 │   └── quick_sanity.py
 ├── .gitignore
 ├── flat_tree_filter.py
 ├── FLATTENED_CODE.txt
 ├── LICENSE
 ├── Makefile
+├── memory.zip
 ├── pyproject.toml
 ├── README.md
 ├── requirements-dev.txt

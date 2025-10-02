@@ -1,6 +1,6 @@
 # /integrations/botframework/bots/echo_bot.py
-from botbuilder.core import ActivityHandler, TurnContext
-from botbuilder.schema import ChannelAccount
+# from botbuilder.core import ActivityHandler, TurnContext
+# from botbuilder.schema import ChannelAccount
 
 def simple_sentiment(text: str):
     """

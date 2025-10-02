@@ -53,7 +53,6 @@ async def favicon():
     # Graceful fallback if no icon present
     return Response(status_code=204)
 
-
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -61,7 +60,6 @@ def health():
 @app.post("/chatbot/message")
 async def chatbot_message(request: Request):
     payload = await request.json()
-    msg = str(payload.get("message", "")).strip()
-    if not msg:
-        msg = "help"
+    msg = str(payload.get("message", "")).strip() or "help"
     return ChatBot().reply(msg)
+

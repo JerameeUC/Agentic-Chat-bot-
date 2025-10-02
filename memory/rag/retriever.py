@@ -1,4 +1,4 @@
-# /memory/rag/data/retriever.py
+# /memory/rag/retriever.py
 """
 Minimal RAG retriever that sits on top of the TF-IDF indexer.
 
@@ -8,14 +8,13 @@ Features
 - Passage extraction around query terms with overlap
 - Lightweight proximity-based reranking of passages
 
-No third-party dependencies; pairs with memory/rag/data/indexer.py.
+No third-party dependencies; pairs with memory/rag/indexer.py.
 """
 
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 from pathlib import Path
-import math
 import re
 
 from .indexer import (
@@ -43,12 +42,10 @@ class Passage:
     text: str              # extracted passage
     snippet: str           # human-friendly short snippet (may equal text if short)
 
-
 @dataclass(frozen=True)
 class Filters:
-    title_contains: Optional[str] = None        # case-insensitive containment
-    require_tags: Optional[Iterable[str]] = None  # all tags must be present (AND)
-
+    title_contains: Optional[str] = None               # case-insensitive containment
+    require_tags: Optional[Iterable[str]] = None       # all tags must be present (AND)
 
 # -----------------------------
 # Retrieval API
@@ -76,14 +73,11 @@ def retrieve(
     if idx.n_docs == 0 or not query.strip():
         return []
 
-    # initial doc hits
-    hits = index_search(query, k=max(k * 3, k), path=index_path)  # overshoot; filter + rerank will trim
+    hits = index_search(query, k=max(k * 3, k), path=index_path)  # overshoot; filter+rerank will trim
 
-    # filter hits by title/tags if requested
     if filters:
         hits = _apply_filters(hits, idx, filters)
 
-    # extract best passage per remaining doc
     q_tokens = tokenize(query)
     passages: List[Passage] = []
     for h in hits:
@@ -99,7 +93,7 @@ def retrieve(
             source=meta.source,
             title=meta.title,
             tags=meta.tags,
-            score=float(h.score),  # base score from index
+            score=float(h.score),
             start=start,
             end=end,
             text=passage_text,
@@ -109,25 +103,15 @@ def retrieve(
     if not passages:
         return []
 
-    # optional rerank by proximity of query terms inside the passage
     if enable_rerank:
         passages = _rerank_by_proximity(passages, q_tokens)
 
-    # final top-k
     passages.sort(key=lambda p: p.score, reverse=True)
     return passages[:k]
 
-
-def retrieve_texts(
-    query: str,
-    k: int = 5,
-    **kwargs,
-) -> List[str]:
-    """
-    Convenience: return only the passage texts for a query.
-    """
+def retrieve_texts(query: str, k: int = 5, **kwargs) -> List[str]:
+    """Convenience: return only the passage texts for a query."""
     return [p.text for p in retrieve(query, k=k, **kwargs)]
-
 
 # -----------------------------
 # Internals
@@ -158,7 +142,6 @@ def _apply_filters(hits, idx: TfidfIndex, filters: Filters):
         out.append(h)
     return out
 
-
 _WORD_RE = re.compile(r"[A-Za-z0-9']+")
 
 def _find_all(term: str, text: str) -> List[int]:
@@ -174,7 +157,6 @@ def _find_all(term: str, text: str) -> List[int]:
         i = low.find(term_l, i + 1)
     return out
 
-
 def _extract_passage(text: str, q_tokens: List[str], window: int = 350, overlap: int = 60) -> Tuple[int, int, str]:
     """
     Pick a passage around the earliest match of any query token.
@@ -183,17 +165,12 @@ def _extract_passage(text: str, q_tokens: List[str], window: int = 350, overlap:
     if not text:
         return 0, 0, ""
 
-    low = text.lower()
-    # choose the earliest hit among query tokens
     hit_positions: List[int] = []
     for qt in q_tokens:
         hit_positions.extend(_find_all(qt, text))
-    start: int
-    end: int
 
     if hit_positions:
-        i = max(0, min(hit_positions) - overlap)
-        start = i
+        start = max(0, min(hit_positions) - overlap)
         end = min(len(text), start + window)
     else:
         start = 0
@@ -201,63 +178,39 @@ def _extract_passage(text: str, q_tokens: List[str], window: int = 350, overlap:
 
     return start, end, text[start:end].strip()
 
-
 def _rerank_by_proximity(passages: List[Passage], q_tokens: List[str]) -> List[Passage]:
     """
     Adjust scores based on how tightly query tokens cluster inside the passage.
-    Heuristic:
-      - For each unique query token, find all positions in the passage (word indices).
-      - Compute average pairwise distance among the closest occurrences.
-      - Convert to a bonus in [0, 0.25] and add to base score.
+    Heuristic: shorter span between matched terms → slightly higher score (≤ +0.25).
     """
-    q_unique = [t for t in dict.fromkeys(q_tokens)]  # preserve order, dedupe
+    q_unique = [t for t in dict.fromkeys(q_tokens)]  # dedupe, preserve order
     if not q_unique:
         return passages
 
     def word_positions(text: str, term: str) -> List[int]:
-        # word-level positions for term
-        positions: List[int] = []
         words = [w.group(0).lower() for w in _WORD_RE.finditer(text)]
-        for i, w in enumerate(words):
-            if term == w:
-                positions.append(i)
-        return positions
+        return [i for i, w in enumerate(words) if w == term]
 
     def proximity_bonus(p: Passage) -> float:
-        # collect positions per term
         pos_lists = [word_positions(p.text, t) for t in q_unique]
-        if all(len(ps) == 0 for ps in pos_lists):
+        if all(not pl for pl in pos_lists):
             return 0.0
 
-        # flatten a representative set of positions (closest aligned indices)
-        reps: List[int] = []
-        for ps in pos_lists:
-            reps.append(ps[0] if ps else 999999)
-
-        # average absolute distance to the median position
-        med = sorted([x for x in reps if x != 999999])
-        if not med:
+        reps = [(pl[0] if pl else None) for pl in pos_lists]
+        core = [x for x in reps if x is not None]
+        if not core:
             return 0.0
-        mid = med[len(med) // 2]
-        avg_dist = sum(abs((x if x != 999999 else mid) - mid) for x in reps) / max(1, len(reps))
-
-        # squash distance → bonus; closer = bigger bonus
-        # dist 0 → 0.25 bonus; dist 10+ → ~0 bonus
+        core.sort()
+        mid = core[len(core)//2]
+        avg_dist = sum(abs((x if x is not None else mid) - mid) for x in reps) / max(1, len(reps))
         bonus = max(0.0, 0.25 * (1.0 - min(avg_dist, 10.0) / 10.0))
         return float(bonus)
 
-    reranked: List[Passage] = []
+    out: List[Passage] = []
     for p in passages:
-        bonus = proximity_bonus(p)
-        reranked.append(Passage(
-            **{**p.__dict__, "score": p.score + bonus}
-        ))
-    return reranked
-
-
-# -----------------------------
-# CLI / quick test
-# -----------------------------
+        b = proximity_bonus(p)
+        out.append(Passage(**{**p.__dict__, "score": p.score + b}))
+    return out
 
 if __name__ == "__main__":
     import sys
@@ -265,4 +218,4 @@ if __name__ == "__main__":
     out = retrieve(q, k=3)
     for i, p in enumerate(out, 1):
         print(f"[{i}] {p.score:.4f}  {p.title or '(untitled)'}  —  {p.source}")
-        print("    ", (p.snippet.replace("\n", " ") if p.snippet else "")[:200])
+        print("    ", (p.snippet.replace('\\n', ' ') if p.snippet else '')[:200])

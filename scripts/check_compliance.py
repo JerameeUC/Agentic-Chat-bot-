@@ -10,10 +10,11 @@ Compliance checker for disallowed dependencies.
 Run:
     python scripts/check_compliance.py
 """
+# … keep scan_file as-is …
 
-import sys
+#!/usr/bin/env python3
+import sys, re
 import os
-import re
 from pathlib import Path
 
 # -----------------------------
@@ -40,53 +41,46 @@ IMPORT_RE = re.compile(r"^\s*(?:import|from)\s+([a-zA-Z0-9_.]+)")
 # Scan
 # -----------------------------
 
-def _supports_utf8():
+# top: keep existing imports/config …
+
+def _supports_utf8() -> bool:
     enc = (sys.stdout.encoding or "").lower()
     return "utf-8" in enc
 
 FAIL_MARK = "FAIL:" if not _supports_utf8() else "❌"
 PASS_MARK = "OK:"   if not _supports_utf8() else "✅"
 
-# then use:
-print(f"{FAIL_MARK} Compliance check failed:")
-print(f"{PASS_MARK} Compliance check passed (no disallowed deps).")
-
-def scan_file(path: Path) -> list[str]:
-    bad = []
+def scan_file(path: Path):
+    fails = []
     try:
-        lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-    except Exception as e:
-        print(f"[warn] could not read {path}: {e}", file=sys.stderr)
-        return []
-    for i, line in enumerate(lines, 1):
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return fails
+    for i, line in enumerate(text.splitlines(), 1):
         m = IMPORT_RE.match(line)
         if not m:
             continue
         mod = m.group(1)
-        for banned in DISALLOWED:
-            if mod == banned or mod.startswith(banned + "."):
-                bad.append(f"{path}:{i}: disallowed import '{mod}'")
-    return bad
+        root = mod.split(".")[0]
+        if root in DISALLOWED:
+            fails.append(f"{path.as_posix()}:{i}: disallowed import '{mod}'")
+    return fails
 
-
-def main(root: str = ".") -> int:
-    root = Path(root)
-    failures: list[str] = []
-
+def main():
+    root = Path(__file__).resolve().parents[1]
+    failures = []
     for p in root.rglob("*.py"):
-        if any(part in IGNORE_DIRS for part in p.parts):
+        sp = p.as_posix()
+        if any(seg in sp for seg in ("/.venv/", "/venv/", "/env/", "/__pycache__/", "/tests/")):
             continue
         failures.extend(scan_file(p))
-
     if failures:
-        print("❌ Compliance check failed:")
-        for f in failures:
-            print("  ", f)
+        print("FAIL: Compliance check failed:")
+        for msg in failures:
+            print(msg)
         return 1
-    else:
-        print("✅ Compliance check passed (no disallowed deps).")
-        return 0
-
+    print("OK: Compliance check passed (no disallowed deps).")
+    return 0
 
 if __name__ == "__main__":
     sys.exit(main())

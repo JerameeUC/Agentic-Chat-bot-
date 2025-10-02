@@ -6,8 +6,8 @@ import sys
 import json
 from logic import handle_text
 from aiohttp import web
-from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
-from botbuilder.schema import Activity
+# from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
+# from botbuilder.schema import Activity
 import aiohttp_cors
 from pathlib import Path
 

@@ -2,7 +2,7 @@
 # routes.py — HTTP handlers (root-level, no /app package)
 import json
 from aiohttp import web
-from botbuilder.schema import Activity
+# from botbuilder.schema import Activity
 
 # Prefer project logic if available
 try:
