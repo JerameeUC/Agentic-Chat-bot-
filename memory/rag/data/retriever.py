@@ -1,5 +1,5 @@
-# /memory/rag/data/retriever.py
-# Thin shim so tests can import from memory.rag.data.retriever
-from ..retriever import retrieve, retrieve_texts, Filters, Passage
+# memory/rag/data/retriever.py
+from __future__ import annotations
+from ..retriever import retrieve, retrieve_texts, Filters  # noqa: F401
 
-__all__ = ["retrieve", "retrieve_texts", "Filters", "Passage"]
+__all__ = ["retrieve", "retrieve_texts", "Filters"]

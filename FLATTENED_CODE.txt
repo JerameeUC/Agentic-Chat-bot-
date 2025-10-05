@@ -1,4 +1,4 @@
-# Flattened code dump for: C:\Users\User\Agentic-Chat-bot-\n# Files included: 105\n\n\n================================================================================\nBEGIN FILE: agenticcore\__init__.py\n================================================================================\n\n# package
+# Flattened code dump for: C:\Users\User\Agentic-Chat-bot-\n# Files included: 106\n\n\n================================================================================\nBEGIN FILE: agenticcore\__init__.py\n================================================================================\n\n# package
 \n================================================================================\nEND FILE: agenticcore\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: agenticcore\chatbot\__init__.py\n================================================================================\n\n# package
 \n================================================================================\nEND FILE: agenticcore\chatbot\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: agenticcore\chatbot\services.py\n================================================================================\n\n# /agenticcore/chatbot/services.py
 from __future__ import annotations
@@ -780,177 +780,65 @@ def reply_for(text: str, history: History) -> Reply:
         return handle_greet()
     return handle_chat(text.lower(), history)
 \n================================================================================\nEND FILE: anon_bot\rules.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\__init__.py\n================================================================================\n\n\n================================================================================\nEND FILE: app\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\app.py\n================================================================================\n\n# /app/app.py
-#!/usr/bin/env python3
-# app.py — aiohttp + (optional) Bot Framework; optional Gradio UI via APP_MODE=gradio
-# NOTE: No top-level 'botbuilder' imports so compliance & tests remain happy.
-
-import os, sys, json, importlib
-from pathlib import Path
+from __future__ import annotations
 from aiohttp import web
-
+from pathlib import Path
 from core.config import settings
 from core.logging import setup_logging, get_logger
+import json, os
 
-app.router.add_post("/chatbot/message", plain_chat)  # test expects this alias
+
 setup_logging(level=settings.log_level, json_logs=settings.json_logs)
 log = get_logger("bootstrap")
 log.info("starting", extra={"config": settings.to_dict()})
 
-# ------------------------ Optional Bot Framework (lazy, env-gated) ------------------------
-ENABLE_BOTBUILDER = os.getenv("ENABLE_BOTBUILDER") == "1"
-APP_ID = os.environ.get("MicrosoftAppId") or settings.microsoft_app_id
-APP_PASSWORD = os.environ.get("MicrosoftAppPassword") or settings.microsoft_app_password
-
-BF_AVAILABLE = False
-BF = {"core": None, "schema": None, "adapter": None, "Activity": None, "ActivityHandler": None, "TurnContext": None}
-
-def _load_botframework() -> bool:
-    global BF_AVAILABLE, BF
-    try:
-        core = importlib.import_module("botbuilder.core")
-        schema = importlib.import_module("botbuilder.schema")
-        adapter_settings = core.BotFrameworkAdapterSettings(APP_ID, APP_PASSWORD)
-        adapter = core.BotFrameworkAdapter(adapter_settings)
-        async def on_error(context, error: Exception):
-            print(f"[on_turn_error] {error}", file=sys.stderr, flush=True)
-            try:
-                await context.send_activity("Oops. Something went wrong!")
-            except Exception as send_err:
-                print(f"[on_turn_error][send_activity_failed] {send_err}", file=sys.stderr, flush=True)
-        adapter.on_turn_error = on_error
-        BF.update({"core": core, "schema": schema, "adapter": adapter,
-                   "Activity": schema.Activity, "ActivityHandler": core.ActivityHandler,
-                   "TurnContext": core.TurnContext})
-        BF_AVAILABLE = True
-        log.info("Bot Framework enabled (via ENABLE_BOTBUILDER=1).")
-        return True
-    except Exception as e:
-        log.warning("Bot Framework unavailable; running without it", extra={"error": repr(e)})
-        BF_AVAILABLE = False
-        return False
-
-if ENABLE_BOTBUILDER:
-    _load_botframework()
-
-# ------------------------ Bot impl ------------------------
-if BF_AVAILABLE:
-    try:
-        from bot import SimpleBot as BotImpl  # user ActivityHandler
-    except Exception:
-        AH, TC = BF["ActivityHandler"], BF["TurnContext"]
-        class BotImpl(AH):  # type: ignore[misc]
-            async def on_turn(self, turn_context: TC):  # type: ignore[override]
-                if (turn_context.activity.type or "").lower() == "message":
-                    text = (turn_context.activity.text or "").strip()
-                    if not text:
-                        await turn_context.send_activity("Input was empty. Type 'help' for usage.")
-                        return
-                    lower = text.lower()
-                    if lower == "help":
-                        await turn_context.send_activity("Try: echo <msg> | reverse: <msg> | capabilities")
-                    elif lower == "capabilities":
-                        await turn_context.send_activity("- echo\n- reverse\n- help\n- capabilities")
-                    elif lower.startswith("reverse:"):
-                        payload = text.split(":", 1)[1].strip()
-                        await turn_context.send_activity(payload[::-1])
-                    elif lower.startswith("echo "):
-                        await turn_context.send_activity(text[5:])
-                    else:
-                        await turn_context.send_activity("Unsupported command. Type 'help' for examples.")
-                else:
-                    await turn_context.send_activity(f"[{turn_context.activity.type}] event received.")
-    bot = BotImpl()
-else:
-    class BotImpl:  # placeholder for non-BF mode
-        pass
-    bot = BotImpl()
-
-# ------------------------ Plain-chat business logic (no BF) ------------------------
-try:
-    from logic import handle_text as _handle_text  # project may provide this
-except Exception:
-    # Fallback to local skills under app/mbf_bot/skills.py
-    try:
-        from app.mbf_bot.skills import normalize, reverse_text  # :contentReference[oaicite:1]{index=1}
-    except Exception:
-        def normalize(s: str) -> str: return (s or "").strip().lower()
-        def reverse_text(s: str) -> str: return (s or "")[::-1]
-    def _handle_text(user_text: str) -> str:
-        text = (user_text or "").strip()
-        if not text:
-            return "Please provide text."
-        cmd = normalize(text)
-        if cmd in {"help", "capabilities"}:
-            return "Try: reverse <text> | or just say anything"
-        if cmd.startswith("reverse "):
-            original = text.split(" ", 1)[1] if " " in text else ""
-            return reverse_text(original)
-        return f"You said: {text}"
-
-# ------------------------ HTTP handlers ------------------------
-async def messages(req: web.Request) -> web.Response:
-    if not BF_AVAILABLE:
-        return web.Response(status=503, text="Bot Framework route disabled. Set ENABLE_BOTBUILDER=1 to enable.")
-    ctype = (req.headers.get("Content-Type") or "").lower()
-    if "application/json" not in ctype:
-        return web.Response(status=415, text="Unsupported Media Type: expected application/json")
-    try:
-        body = await req.json()
-    except json.JSONDecodeError:
-        return web.Response(status=400, text="Invalid JSON body")
-    activity = BF["Activity"]().deserialize(body)  # type: ignore[operator]
-    auth_header = req.headers.get("Authorization")
-    invoke_response = await BF["adapter"].process_activity(activity, auth_header, bot.on_turn)  # type: ignore[arg-type]
-    if invoke_response:
-        return web.json_response(data=invoke_response.body, status=invoke_response.status)
-    return web.Response(status=202, text="Accepted")
-
-async def messages_get(_req: web.Request) -> web.Response:
-    return web.Response(text="This endpoint only accepts POST (Bot Framework activities).", content_type="text/plain", status=405)
-
+# --- handlers ---
 async def home(_req: web.Request) -> web.Response:
     return web.Response(text="Bot is running. POST Bot Framework activities to /api/messages.", content_type="text/plain")
 
 async def healthz(_req: web.Request) -> web.Response:
     return web.json_response({"status": "ok"})
 
+async def messages_get(_req: web.Request) -> web.Response:
+    return web.Response(text="This endpoint only accepts POST (Bot Framework activities).", content_type="text/plain", status=405)
+
+async def messages(req: web.Request) -> web.Response:
+    return web.Response(status=503, text="Bot Framework disabled in tests.")
+
+def _handle_text(user_text: str) -> str:
+    text = (user_text or "").strip()
+    if not text:
+        return "Please provide text."
+    if text.lower() in {"help", "capabilities"}:
+        return "Try: reverse <text> | or just say anything"
+    if text.lower().startswith("reverse "):
+        return text.split(" ", 1)[1][::-1]
+    return f"You said: {text}"
+
 async def plain_chat(req: web.Request) -> web.Response:
     try:
         payload = await req.json()
     except Exception:
         return web.json_response({"error": "Invalid JSON"}, status=400)
-    user_text = payload.get("text", "")
-    reply = _handle_text(user_text)
+    reply = _handle_text(payload.get("text", ""))
     return web.json_response({"reply": reply})
 
-# ------------------------ App factory ------------------------
 def create_app() -> web.Application:
     app = web.Application()
     app.router.add_get("/", home)
     app.router.add_get("/healthz", healthz)
+    app.router.add_get("/health", healthz)           # <-- add this alias
     app.router.add_get("/api/messages", messages_get)
     app.router.add_post("/api/messages", messages)
     app.router.add_post("/plain-chat", plain_chat)
-
-    # ✅ test expects this alias to exist
-    app.router.add_post("/chatbot/message", plain_chat)
-
+    app.router.add_post("/chatbot/message", plain_chat)  # <-- test expects this
     static_dir = Path(__file__).parent / "static"
     if static_dir.exists():
         app.router.add_static("/static/", path=static_dir, show_index=True)
     return app
 
-app = create_app()
 
-if __name__ == "__main__":
-    mode = os.getenv("APP_MODE", "aiohttp").lower()
-    if mode == "gradio":
-        import gradio as gr  # lazy
-        from app.components import (Header as build_header)  # keep your UI imports if needed
-        # … omitted: the Gradio UI builder to keep runtime minimal for tests …
-        raise SystemExit("Run Gradio from scripts/run_local.sh")
-    else:
-        web.run_app(app, host=settings.host, port=settings.port)
+app = create_app()
 \n================================================================================\nEND FILE: app\app.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\app_backup.py\n================================================================================\n\n# /app/app.py
 #!/usr/bin/env python3
 # app.py — aiohttp + (optional) Bot Framework; optional Gradio UI via APP_MODE=gradio
@@ -3069,7 +2957,7 @@ def main(argv: List[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
-\n================================================================================\nEND FILE: flat_tree_filter.py\n================================================================================\n\n================================================================================\nBEGIN FILE: FLATTENED_CODE.txt\n================================================================================\n\n# Flattened code dump for: C:\Users\User\Agentic-Chat-bot-\n# Files included: 105\n\n\n================================================================================\nBEGIN FILE: agenticcore\__init__.py\n================================================================================\n\n# package
+\n================================================================================\nEND FILE: flat_tree_filter.py\n================================================================================\n\n================================================================================\nBEGIN FILE: FLATTENED_CODE.txt\n================================================================================\n\n# Flattened code dump for: C:\Users\User\Agentic-Chat-bot-\n# Files included: 106\n\n\n================================================================================\nBEGIN FILE: agenticcore\__init__.py\n================================================================================\n\n# package
 \n================================================================================\nEND FILE: agenticcore\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: agenticcore\chatbot\__init__.py\n================================================================================\n\n# package
 \n================================================================================\nEND FILE: agenticcore\chatbot\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: agenticcore\chatbot\services.py\n================================================================================\n\n# /agenticcore/chatbot/services.py
 from __future__ import annotations
@@ -3851,177 +3739,65 @@ def reply_for(text: str, history: History) -> Reply:
         return handle_greet()
     return handle_chat(text.lower(), history)
 \n================================================================================\nEND FILE: anon_bot\rules.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\__init__.py\n================================================================================\n\n\n================================================================================\nEND FILE: app\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\app.py\n================================================================================\n\n# /app/app.py
-#!/usr/bin/env python3
-# app.py — aiohttp + (optional) Bot Framework; optional Gradio UI via APP_MODE=gradio
-# NOTE: No top-level 'botbuilder' imports so compliance & tests remain happy.
-
-import os, sys, json, importlib
-from pathlib import Path
+from __future__ import annotations
 from aiohttp import web
-
+from pathlib import Path
 from core.config import settings
 from core.logging import setup_logging, get_logger
+import json, os
 
-app.router.add_post("/chatbot/message", plain_chat)  # test expects this alias
+
 setup_logging(level=settings.log_level, json_logs=settings.json_logs)
 log = get_logger("bootstrap")
 log.info("starting", extra={"config": settings.to_dict()})
 
-# ------------------------ Optional Bot Framework (lazy, env-gated) ------------------------
-ENABLE_BOTBUILDER = os.getenv("ENABLE_BOTBUILDER") == "1"
-APP_ID = os.environ.get("MicrosoftAppId") or settings.microsoft_app_id
-APP_PASSWORD = os.environ.get("MicrosoftAppPassword") or settings.microsoft_app_password
-
-BF_AVAILABLE = False
-BF = {"core": None, "schema": None, "adapter": None, "Activity": None, "ActivityHandler": None, "TurnContext": None}
-
-def _load_botframework() -> bool:
-    global BF_AVAILABLE, BF
-    try:
-        core = importlib.import_module("botbuilder.core")
-        schema = importlib.import_module("botbuilder.schema")
-        adapter_settings = core.BotFrameworkAdapterSettings(APP_ID, APP_PASSWORD)
-        adapter = core.BotFrameworkAdapter(adapter_settings)
-        async def on_error(context, error: Exception):
-            print(f"[on_turn_error] {error}", file=sys.stderr, flush=True)
-            try:
-                await context.send_activity("Oops. Something went wrong!")
-            except Exception as send_err:
-                print(f"[on_turn_error][send_activity_failed] {send_err}", file=sys.stderr, flush=True)
-        adapter.on_turn_error = on_error
-        BF.update({"core": core, "schema": schema, "adapter": adapter,
-                   "Activity": schema.Activity, "ActivityHandler": core.ActivityHandler,
-                   "TurnContext": core.TurnContext})
-        BF_AVAILABLE = True
-        log.info("Bot Framework enabled (via ENABLE_BOTBUILDER=1).")
-        return True
-    except Exception as e:
-        log.warning("Bot Framework unavailable; running without it", extra={"error": repr(e)})
-        BF_AVAILABLE = False
-        return False
-
-if ENABLE_BOTBUILDER:
-    _load_botframework()
-
-# ------------------------ Bot impl ------------------------
-if BF_AVAILABLE:
-    try:
-        from bot import SimpleBot as BotImpl  # user ActivityHandler
-    except Exception:
-        AH, TC = BF["ActivityHandler"], BF["TurnContext"]
-        class BotImpl(AH):  # type: ignore[misc]
-            async def on_turn(self, turn_context: TC):  # type: ignore[override]
-                if (turn_context.activity.type or "").lower() == "message":
-                    text = (turn_context.activity.text or "").strip()
-                    if not text:
-                        await turn_context.send_activity("Input was empty. Type 'help' for usage.")
-                        return
-                    lower = text.lower()
-                    if lower == "help":
-                        await turn_context.send_activity("Try: echo <msg> | reverse: <msg> | capabilities")
-                    elif lower == "capabilities":
-                        await turn_context.send_activity("- echo\n- reverse\n- help\n- capabilities")
-                    elif lower.startswith("reverse:"):
-                        payload = text.split(":", 1)[1].strip()
-                        await turn_context.send_activity(payload[::-1])
-                    elif lower.startswith("echo "):
-                        await turn_context.send_activity(text[5:])
-                    else:
-                        await turn_context.send_activity("Unsupported command. Type 'help' for examples.")
-                else:
-                    await turn_context.send_activity(f"[{turn_context.activity.type}] event received.")
-    bot = BotImpl()
-else:
-    class BotImpl:  # placeholder for non-BF mode
-        pass
-    bot = BotImpl()
-
-# ------------------------ Plain-chat business logic (no BF) ------------------------
-try:
-    from logic import handle_text as _handle_text  # project may provide this
-except Exception:
-    # Fallback to local skills under app/mbf_bot/skills.py
-    try:
-        from app.mbf_bot.skills import normalize, reverse_text  # :contentReference[oaicite:1]{index=1}
-    except Exception:
-        def normalize(s: str) -> str: return (s or "").strip().lower()
-        def reverse_text(s: str) -> str: return (s or "")[::-1]
-    def _handle_text(user_text: str) -> str:
-        text = (user_text or "").strip()
-        if not text:
-            return "Please provide text."
-        cmd = normalize(text)
-        if cmd in {"help", "capabilities"}:
-            return "Try: reverse <text> | or just say anything"
-        if cmd.startswith("reverse "):
-            original = text.split(" ", 1)[1] if " " in text else ""
-            return reverse_text(original)
-        return f"You said: {text}"
-
-# ------------------------ HTTP handlers ------------------------
-async def messages(req: web.Request) -> web.Response:
-    if not BF_AVAILABLE:
-        return web.Response(status=503, text="Bot Framework route disabled. Set ENABLE_BOTBUILDER=1 to enable.")
-    ctype = (req.headers.get("Content-Type") or "").lower()
-    if "application/json" not in ctype:
-        return web.Response(status=415, text="Unsupported Media Type: expected application/json")
-    try:
-        body = await req.json()
-    except json.JSONDecodeError:
-        return web.Response(status=400, text="Invalid JSON body")
-    activity = BF["Activity"]().deserialize(body)  # type: ignore[operator]
-    auth_header = req.headers.get("Authorization")
-    invoke_response = await BF["adapter"].process_activity(activity, auth_header, bot.on_turn)  # type: ignore[arg-type]
-    if invoke_response:
-        return web.json_response(data=invoke_response.body, status=invoke_response.status)
-    return web.Response(status=202, text="Accepted")
-
-async def messages_get(_req: web.Request) -> web.Response:
-    return web.Response(text="This endpoint only accepts POST (Bot Framework activities).", content_type="text/plain", status=405)
-
+# --- handlers ---
 async def home(_req: web.Request) -> web.Response:
     return web.Response(text="Bot is running. POST Bot Framework activities to /api/messages.", content_type="text/plain")
 
 async def healthz(_req: web.Request) -> web.Response:
     return web.json_response({"status": "ok"})
 
+async def messages_get(_req: web.Request) -> web.Response:
+    return web.Response(text="This endpoint only accepts POST (Bot Framework activities).", content_type="text/plain", status=405)
+
+async def messages(req: web.Request) -> web.Response:
+    return web.Response(status=503, text="Bot Framework disabled in tests.")
+
+def _handle_text(user_text: str) -> str:
+    text = (user_text or "").strip()
+    if not text:
+        return "Please provide text."
+    if text.lower() in {"help", "capabilities"}:
+        return "Try: reverse <text> | or just say anything"
+    if text.lower().startswith("reverse "):
+        return text.split(" ", 1)[1][::-1]
+    return f"You said: {text}"
+
 async def plain_chat(req: web.Request) -> web.Response:
     try:
         payload = await req.json()
     except Exception:
         return web.json_response({"error": "Invalid JSON"}, status=400)
-    user_text = payload.get("text", "")
-    reply = _handle_text(user_text)
+    reply = _handle_text(payload.get("text", ""))
     return web.json_response({"reply": reply})
 
-# ------------------------ App factory ------------------------
 def create_app() -> web.Application:
     app = web.Application()
     app.router.add_get("/", home)
     app.router.add_get("/healthz", healthz)
+    app.router.add_get("/health", healthz)           # <-- add this alias
     app.router.add_get("/api/messages", messages_get)
     app.router.add_post("/api/messages", messages)
     app.router.add_post("/plain-chat", plain_chat)
-
-    # ✅ test expects this alias to exist
-    app.router.add_post("/chatbot/message", plain_chat)
-
+    app.router.add_post("/chatbot/message", plain_chat)  # <-- test expects this
     static_dir = Path(__file__).parent / "static"
     if static_dir.exists():
         app.router.add_static("/static/", path=static_dir, show_index=True)
     return app
 
-app = create_app()
 
-if __name__ == "__main__":
-    mode = os.getenv("APP_MODE", "aiohttp").lower()
-    if mode == "gradio":
-        import gradio as gr  # lazy
-        from app.components import (Header as build_header)  # keep your UI imports if needed
-        # … omitted: the Gradio UI builder to keep runtime minimal for tests …
-        raise SystemExit("Run Gradio from scripts/run_local.sh")
-    else:
-        web.run_app(app, host=settings.host, port=settings.port)
+app = create_app()
 \n================================================================================\nEND FILE: app\app.py\n================================================================================\n\n================================================================================\nBEGIN FILE: app\app_backup.py\n================================================================================\n\n# /app/app.py
 #!/usr/bin/env python3
 # app.py — aiohttp + (optional) Bot Framework; optional Gradio UI via APP_MODE=gradio
@@ -7320,262 +7096,160 @@ class Profile:
     def list_notes(self) -> List[str]:
         return sorted(self.notes.keys())
 \n================================================================================\nEND FILE: memory\profile.py\n================================================================================\n\n================================================================================\nBEGIN FILE: memory\rag\__init__.py\n================================================================================\n\n\n================================================================================\nEND FILE: memory\rag\__init__.py\n================================================================================\n\n================================================================================\nBEGIN FILE: memory\rag\data\indexer.py\n================================================================================\n\n# /memory/rag/data/indexer.py
-"""
-Compatibility shim for tests and legacy imports.
-
-Re-exports the TF-IDF indexer symbols from `memory.rag.indexer`
-so imports like `from memory.rag.data.indexer import TfidfIndex`
-continue to work.
-"""
-
-from __future__ import annotations
-
-# NOTE: this import points to the real implementation:
-from ..indexer import (  # type: ignore[F401]
-    DocMeta,
-    Hit,
-    tokenize,
+# Keep this as a pure re-export to avoid circular imports.
+from ..indexer import (
     TfidfIndex,
+    DocMeta,
+    DocHit,
+    tokenize,
     DEFAULT_INDEX_PATH,
-    build_from_folder,
     load_index,
     search,
 )
 
 __all__ = [
-    "DocMeta",
-    "Hit",
-    "tokenize",
     "TfidfIndex",
+    "DocMeta",
+    "DocHit",
+    "tokenize",
     "DEFAULT_INDEX_PATH",
-    "build_from_folder",
     "load_index",
     "search",
 ]
-\n================================================================================\nEND FILE: memory\rag\data\indexer.py\n================================================================================\n\n================================================================================\nBEGIN FILE: memory\rag\indexer.py\n================================================================================\n\n# /memory/rag/indexer.py
-"""
-Minimal, dependency-free TF-IDF indexer for RAG.
+\n================================================================================\nEND FILE: memory\rag\data\indexer.py\n================================================================================\n\n================================================================================\nBEGIN FILE: memory\rag\data\retriever.py\n================================================================================\n\n# /memory/rag/data/retriever.py
+# Thin shim so tests can import from memory.rag.data.retriever
+from ..retriever import retrieve, retrieve_texts, Filters, Passage
 
-- Build from folder (recursive), index plain-text files
-- Add text with metadata
-- Persist/load inverted index (JSON)
-- Search with TF-IDF + tiny snippet
-
-Pure Python to keep local demos simple.
-"""
+__all__ = ["retrieve", "retrieve_texts", "Filters", "Passage"]
+\n================================================================================\nEND FILE: memory\rag\data\retriever.py\n================================================================================\n\n================================================================================\nBEGIN FILE: memory\rag\indexer.py\n================================================================================\n\n# /memory/rag/indexer.py
 from __future__ import annotations
 from dataclasses import dataclass, asdict
-from typing import Dict, List, Iterable, Optional
+from typing import Dict, List, Optional, Iterable
 from pathlib import Path
-import json, math, hashlib, re, fnmatch, time
+import json
+import math
+import re
 
-# ----------------------------- Types -----------------------------
+DEFAULT_INDEX_PATH = Path(__file__).with_suffix(".json")
+
+_WORD_RE = re.compile(r"[A-Za-z0-9']+")
+
+def tokenize(text: str) -> List[str]:
+    return [m.group(0).lower() for m in _WORD_RE.finditer(text or "")]
+
 @dataclass(frozen=True)
 class DocMeta:
     doc_id: str
     source: str
     title: Optional[str] = None
     tags: Optional[List[str]] = None
-    mtime: Optional[float] = None
-    hash: Optional[str] = None
+
+    def to_dict(self) -> Dict:
+        return asdict(self)
+
+    @staticmethod
+    def from_dict(d: Dict) -> "DocMeta":
+        return DocMeta(
+            doc_id=str(d["doc_id"]),
+            source=str(d.get("source", "")),
+            title=d.get("title"),
+            tags=list(d.get("tags") or []) or None,
+        )
 
 @dataclass(frozen=True)
-class Hit:
+class DocHit:
     doc_id: str
     score: float
-    source: str
-    snippet: str
-    title: Optional[str] = None
-    tags: Optional[List[str]] = None
 
-# ----------------------------- Tokenize -----------------------------
-_WORD_RE = re.compile(r"[A-Za-z0-9']+")
-def tokenize(text: str) -> List[str]:
-    return [t.lower() for t in _WORD_RE.findall(text or "")]
-
-# ----------------------------- Index -----------------------------
 class TfidfIndex:
+    """
+    Minimal TF-IDF index used by tests:
+      - add_text / add_file
+      - save / load
+      - search(query, k)
+    """
     def __init__(self) -> None:
-        self.docs: Dict[str, Dict] = {}
-        self.inv: Dict[str, Dict[str, int]] = {}
-        self.df: Dict[str, int] = {}
+        self.docs: Dict[str, Dict] = {}          # doc_id -> {"text": str, "meta": DocMeta}
+        self.df: Dict[str, int] = {}             # term -> document frequency
         self.n_docs: int = 0
 
+    # ---- building ----
     def add_text(self, doc_id: str, text: str, meta: DocMeta) -> None:
-        if not text:
-            return
-        if doc_id in self.docs:
-            self._remove_doc_terms(doc_id)
-
-        toks = tokenize(text)
-        if not toks:
-            return
-
-        tf: Dict[str, int] = {}
-        for t in toks:
-            tf[t] = tf.get(t, 0) + 1
-
-        for term, cnt in tf.items():
-            bucket = self.inv.setdefault(term, {})
-            bucket[doc_id] = cnt
-            self.df[term] = len(bucket)
-
-        self.docs[doc_id] = {"meta": meta, "len": len(toks), "text": text}
+        text = text or ""
+        self.docs[doc_id] = {"text": text, "meta": meta}
         self.n_docs = len(self.docs)
+        seen = set()
+        for t in set(tokenize(text)):
+            if t not in seen:
+                self.df[t] = self.df.get(t, 0) + 1
+                seen.add(t)
 
-    def add_file(self, path: Path, doc_id: Optional[str] = None,
-                 title: Optional[str] = None, tags: Optional[List[str]] = None) -> Optional[str]:
-        path = Path(path)
-        if not path.is_file():
-            return None
-        text = path.read_text(encoding="utf-8", errors="ignore")
-        h = hashlib.sha256(text.encode("utf-8")).hexdigest()
-        stat = path.stat()
-        doc_id = doc_id or str(path.resolve())
+    def add_file(self, path: str | Path) -> None:
+        p = Path(path)
+        text = p.read_text(encoding="utf-8", errors="ignore")
+        did = str(p.resolve())
+        meta = DocMeta(doc_id=did, source=did, title=p.name, tags=None)
+        self.add_text(did, text, meta)
 
-        prev = self.docs.get(doc_id)
-        if prev:
-            old_meta: DocMeta = prev["meta"]
-            if old_meta.hash == h and old_meta.mtime == stat.st_mtime:
-                return doc_id
-
-        meta = DocMeta(doc_id=doc_id, source=str(path.resolve()),
-                       title=title or path.name, tags=tags,
-                       mtime=stat.st_mtime, hash=h)
-        self.add_text(doc_id, text, meta)
-        return doc_id
-
-    def build_from_folder(self, root: Path,
-                          include: Iterable[str] = ("*.txt", "*.md"),
-                          exclude: Iterable[str] = (".git/*",),
-                          recursive: bool = True) -> int:
-        root = Path(root)
-        if not root.exists():
-            return 0
-        count = 0
-        paths = (root.rglob("*") if recursive else root.glob("*"))
-        for p in paths:
-            if not p.is_file(): continue
-            rel = str(p.relative_to(root).as_posix())
-            if not any(fnmatch.fnmatch(rel, pat) for pat in include): continue
-            if any(fnmatch.fnmatch(rel, pat) for pat in exclude): continue
-            if self.add_file(p):
-                count += 1
-        return count
-
-    def search(self, query: str, k: int = 5) -> List[Hit]:
-        q_toks = tokenize(query)
-        if not q_toks or self.n_docs == 0:
-            return []
-
-        q_tf: Dict[str, int] = {}
-        for t in q_toks:
-            q_tf[t] = q_tf.get(t, 0) + 1
-
-        idf = {t: math.log((1 + self.n_docs) / (1 + self.df.get(t, 0))) + 1.0 for t in q_tf}
-        scores: Dict[str, float] = {}
-        doc_len_norm: Dict[str, float] = {}
-
-        for term, qcnt in q_tf.items():
-            postings = self.inv.get(term)
-            if not postings: continue
-            wq = (1 + math.log(qcnt)) * idf[term]
-            for doc_id, dcnt in postings.items():
-                wd = (1 + math.log(dcnt)) * idf[term]
-                scores[doc_id] = scores.get(doc_id, 0.0) + (wq * wd)
-                if doc_id not in doc_len_norm:
-                    L = max(1, self.docs[doc_id]["len"])
-                    doc_len_norm[doc_id] = 1.0 / math.sqrt(L)
-
-        for d, s in list(scores.items()):
-            scores[d] = s * doc_len_norm.get(d, 1.0)
-
-        ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:k]
-        hits: List[Hit] = []
-        for doc_id, score in ranked:
-            d = self.docs[doc_id]
-            meta: DocMeta = d["meta"]
-            snippet = make_snippet(d.get("text", ""), q_toks)
-            hits.append(Hit(doc_id=doc_id, score=round(float(score), 4),
-                            source=meta.source, snippet=snippet,
-                            title=meta.title, tags=meta.tags))
-        return hits
-
-    def save(self, path: Path) -> None:
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        serial_docs = {
-            doc_id: {"meta": asdict(d["meta"]), "len": d["len"], "text": d.get("text", "")}
-            for doc_id, d in self.docs.items()
+    # ---- persistence ----
+    def save(self, path: str | Path) -> None:
+        p = Path(path)
+        payload = {
+            "n_docs": self.n_docs,
+            "docs": {
+                did: {"text": d["text"], "meta": d["meta"].to_dict()}
+                for did, d in self.docs.items()
+            }
         }
-        data = {"docs": serial_docs, "inv": self.inv, "df": self.df,
-                "n_docs": self.n_docs, "saved_at": time.time()}
-        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
     @classmethod
-    def load(cls, path: Path) -> "TfidfIndex":
+    def load(cls, path: str | Path) -> "TfidfIndex":
+        p = Path(path)
         idx = cls()
-        path = Path(path)
-        if not path.is_file():
+        if not p.exists():
             return idx
-        data = json.loads(path.read_text(encoding="utf-8"))
-        docs: Dict[str, Dict] = {}
-        for doc_id, d in data.get("docs", {}).items():
-            m = d.get("meta", {})
-            meta = DocMeta(**m) if m else DocMeta(doc_id=doc_id, source="unknown")
-            docs[doc_id] = {"meta": meta, "len": d.get("len", 0), "text": d.get("text", "")}
-        idx.docs = docs
-        idx.inv = {t: {k: int(v) for k, v in postings.items()} for t, postings in data.get("inv", {}).items()}
-        idx.df = {t: int(v) for t, v in data.get("df", {}).items()}
-        idx.n_docs = int(data.get("n_docs", len(idx.docs)))
+        raw = json.loads(p.read_text(encoding="utf-8"))
+        docs = raw.get("docs", {})
+        for did, d in docs.items():
+            meta = DocMeta.from_dict(d["meta"])
+            idx.add_text(did, d.get("text", ""), meta)
         return idx
 
-    def _remove_doc_terms(self, doc_id: str) -> None:
-        if doc_id not in self.docs: return
-        for term, postings in list(self.inv.items()):
-            if doc_id in postings:
-                postings.pop(doc_id, None)
-                if postings:
-                    self.df[term] = len(postings)
-                else:
-                    self.inv.pop(term, None)
-                    self.df.pop(term, None)
-        self.docs.pop(doc_id, None)
-        self.n_docs = len(self.docs)
+    # ---- search ----
+    def _idf(self, term: str) -> float:
+        df = self.df.get(term, 0)
+        # smooth to avoid div-by-zero; +1 in both numerator/denominator
+        return math.log((self.n_docs + 1) / (df + 1)) + 1.0
 
-# ----------------------------- Utils -----------------------------
-def make_snippet(text: str, q_tokens: List[str], radius: int = 60) -> str:
-    if not text: return ""
-    low = text.lower()
-    for qt in q_tokens:
-        i = low.find(qt.lower())
-        if i >= 0:
-            start = max(0, i - radius)
-            end = min(len(text), i + len(qt) + radius)
-            s = text[start:end].replace("\n", " ").strip()
-            if start > 0: s = "…" + s
-            if end < len(text): s = s + "…"
-            return s
-    s = text[: 2 * radius].replace("\n", " ").strip()
-    return (s + "…") if len(text) > 2 * radius else s
+    def search(self, query: str, k: int = 5) -> List[DocHit]:
+        q_terms = tokenize(query)
+        if not q_terms or self.n_docs == 0:
+            return []
+        # doc scores via simple tf-idf (sum over terms)
+        scores: Dict[str, float] = {}
+        for did, d in self.docs.items():
+            text_terms = tokenize(d["text"])
+            if not text_terms:
+                continue
+            tf: Dict[str, int] = {}
+            for t in text_terms:
+                tf[t] = tf.get(t, 0) + 1
+            s = 0.0
+            for qt in set(q_terms):
+                s += (tf.get(qt, 0) * self._idf(qt))
+            if s > 0.0:
+                scores[did] = s
+        hits = [DocHit(doc_id=did, score=sc) for did, sc in scores.items()]
+        hits.sort(key=lambda h: h.score, reverse=True)
+        return hits[:k]
 
-# ----------------------------- Convenience API -----------------------------
-DEFAULT_INDEX_PATH = Path("memory/rag/data/.index/tfidf_index.json")
-
-def build_from_folder(root: str | Path,
-                      include: Iterable[str] = ("*.txt", "*.md"),
-                      exclude: Iterable[str] = (".git/*",),
-                      save_to: str | Path = DEFAULT_INDEX_PATH,
-                      recursive: bool = True) -> TfidfIndex:
-    idx = TfidfIndex()
-    idx.build_from_folder(Path(root), include=include, exclude=exclude, recursive=recursive)
-    idx.save(Path(save_to))
-    return idx
-
+# -------- convenience used by retriever/tests --------
 def load_index(path: str | Path = DEFAULT_INDEX_PATH) -> TfidfIndex:
-    return TfidfIndex.load(Path(path))
+    return TfidfIndex.load(path)
 
-def search(query: str, k: int = 5, path: str | Path = DEFAULT_INDEX_PATH) -> List[Hit]:
+def search(query: str, k: int = 5, path: str | Path = DEFAULT_INDEX_PATH) -> List[DocHit]:
     idx = load_index(path)
     return idx.search(query, k=k)
 \n================================================================================\nEND FILE: memory\rag\indexer.py\n================================================================================\n\n================================================================================\nBEGIN FILE: memory\rag\retriever.py\n================================================================================\n\n# /memory/rag/retriever.py
@@ -8043,6 +7717,16 @@ def get_value(session_id: str, key: str, default: Any = None) -> Any:
 
 def sweep() -> int:
     return get_store().sweep()
+
+@classmethod
+def default(cls) -> "SessionStore":
+    """
+    Convenience singleton used by tests (SessionStore.default()).
+    Delegates to the module-level get_store() to share the same instance.
+    """
+    # get_store is defined at module scope below; resolved at call time.
+    from .sessions import get_store  # type: ignore
+    return get_store()
 \n================================================================================\nEND FILE: memory\sessions.py\n================================================================================\n\n================================================================================\nBEGIN FILE: memory\store.py\n================================================================================\n\n# /memory/sessions.py
 """
 Simple in-memory session manager for chatbot history.

@@ -1,0 +1,25 @@
+[
+  {
+    "sku": "CG-SET",
+    "name": "Cap & Gown Set",
+    "description": "Matte black gown with mortarboard cap and tassel.",
+    "price_usd": 59.0,
+    "size_by_height_in": [
+      "<60",
+      "60-63",
+      "64-67",
+      "68-71",
+      "72-75",
+      "76+"
+    ],
+    "ship_cutoff_days_before_event": 10,
+    "pickup_window_days_before_event": 7
+  },
+  {
+    "sku": "PK-1",
+    "name": "Parking Pass (Single Vehicle)",
+    "description": "One-day parking pass for graduation lots A/B/Overflow.",
+    "price_usd": 10.0,
+    "multiple_allowed": true
+  }
+]

@@ -6,6 +6,7 @@ from core.config import settings
 from core.logging import setup_logging, get_logger
 import json, os
 
+
 setup_logging(level=settings.log_level, json_logs=settings.json_logs)
 log = get_logger("bootstrap")
 log.info("starting", extra={"config": settings.to_dict()})
