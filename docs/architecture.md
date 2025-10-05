@@ -74,6 +74,7 @@ The architecture ensures a **clean separation between interface, logic, and serv
 
 ## Documentation
 
+- [Brief Academic Write Up](Brief_Academic_Write_Up.md)
 - [README](../README.md)
 - [Architecture Overview](architecture.md)  
 - [Design Notes](design.md) 

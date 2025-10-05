@@ -78,6 +78,7 @@ async def privacy_middleware(request: Request, call_next):
 
 ## Documentation
 
+- [Brief Academic Write Up](Brief_Academic_Write_Up.md)
 - [README](../README.md)
 - [Architecture Overview](architecture.md)  
 - [Design Notes](design.md) 

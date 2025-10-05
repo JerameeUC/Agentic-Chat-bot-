@@ -98,7 +98,7 @@ Key components include:
 
 ## Documentation
 
-- [Brief Academic Write Up](docs/Brief_Academic_Write_Up.md)
+- [Brief Academic Write Up](Brief_Academic_Write_Up.md)
 - [README](../README.md)
 - [Architecture Overview](architecture.md)  
 - [Design Notes](design.md)  
