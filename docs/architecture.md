@@ -71,3 +71,13 @@ This system follows a **modular chatbot architecture** built around a clear flow
 ## Summary
 
 The architecture ensures a **clean separation between interface, logic, and services**, enabling experimentation with different providers while guaranteeing a safe, privacy-friendly anonymous mode. The flowchart illustrates this layered approach: input → logic → NLU/memory → optional AIaaS → guardrails → output.
+
+## Documentation
+
+- [README](../README.md)
+- [Architecture Overview](architecture.md)  
+- [Design Notes](design.md) 
+- [Developer & Build/Test Guide](Developer_Guide_Build_Test.md) 
+- [Implementation Notes](storefront/IMPLEMENTATION.md) 
+- [Dev Doc](DEV_DOC.md)  
+- [Developer Guide Build Test](Developer_Guide_Build_Test.md) 

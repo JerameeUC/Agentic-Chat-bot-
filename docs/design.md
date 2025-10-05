@@ -70,3 +70,13 @@ These notes document the reasoning behind major design choices, focusing on **AP
 ## Summary
 
 The design balances **privacy, modularity, and extensibility**. By cleanly separating anonymous and logged-in paths, the system can run entirely offline while still supporting richer AI features when configured. Security and privacy are first-class concerns, and tradeoffs were made to keep the system lightweight, testable, and compliant with project constraints.
+
+## Documentation
+
+- [README](../README.md)
+- [Architecture Overview](architecture.md)  
+- [Design Notes](design.md) 
+- [Developer & Build/Test Guide](Developer_Guide_Build_Test.md) 
+- [Implementation Notes](storefront/IMPLEMENTATION.md) 
+- [Dev Doc](DEV_DOC.md)  
+- [Developer Guide Build Test](Developer_Guide_Build_Test.md) 

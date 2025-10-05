@@ -96,3 +96,12 @@ Key components include:
 - **NLP (Natural Language Processing):** A field of AI focused on enabling computers to understand human language.
 - **Sentiment Analysis:** An NLP technique that determines the emotional tone behind a text.
 
+## Documentation
+
+- [Brief Academic Write Up](docs/Brief_Academic_Write_Up.md)
+- [README](../README.md)
+- [Architecture Overview](architecture.md)  
+- [Design Notes](design.md)  
+- [Implementation Notes](storefront/IMPLEMENTATION.md) 
+- [Dev Doc](DEV_DOC.md)
+- [Developer Guide Build Test](Developer_Guide_Build_Test.md) 

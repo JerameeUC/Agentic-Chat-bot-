@@ -118,4 +118,16 @@ curl -X POST http://127.0.0.1:3978/plain-chat -H "Content-Type: application/json
 
 ---
 
+## Documentation
+
+- [Brief Academic Write Up](docs/Brief_Academic_Write_Up.md)
+- [README](../README.md)
+- [Architecture Overview](architecture.md)  
+- [Design Notes](design.md)  
+- [Implementation Notes](storefront/IMPLEMENTATION.md) 
+- [Dev Doc](DEV_DOC.md) 
+- [This Document](Developer_Guide_Build_Test.md) 
+
+---
+
 _Audience: Contributors & Developers_
