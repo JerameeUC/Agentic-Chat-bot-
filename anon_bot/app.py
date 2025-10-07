@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from schemas import MessageIn, MessageOut
-from guardrails import enforce_guardrails
-from rules import route
+from .schemas import MessageIn, MessageOut
+from .guardrails import enforce_guardrails
+from .rules import route
 
 app = FastAPI(title='Anonymous Rule-Based Bot', version='1.0')
 

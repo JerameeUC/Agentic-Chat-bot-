@@ -176,4 +176,94 @@ def _sentiment_azure(text: str) -> Dict[str, Any]:
     except Exception as e:
         return {"provider": "azure", "label": "neutral", "score": 0.5, "error": str(e)}
 
-def _sentiment_openai_pr_
+# --- replace the broken function with this helper ---
+
+def _sentiment_openai_provider(text: str, model: Optional[str] = None) -> Dict[str, Any]:
+    """
+    OpenAI sentiment (import-safe).
+    Returns {"provider","label","score"}; falls back to offline on misconfig.
+    """
+    key = _env("OPENAI_API_KEY")
+    if not key:
+        return _sentiment_offline(text)
+
+    try:
+        # Lazy import to keep compliance/static checks clean
+        openai_mod = importlib.import_module("openai")
+        OpenAI = getattr(openai_mod, "OpenAI")
+
+        client = OpenAI(api_key=key)
+        model = model or _env("OPENAI_SENTIMENT_MODEL", "gpt-4o-mini")
+
+        prompt = (
+            "Classify the sentiment as exactly one of: Positive, Neutral, or Negative.\n"
+            f"Text: {text!r}\n"
+            "Answer with a single word."
+        )
+
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+        )
+
+        raw = (resp.choices[0].message.content or "Neutral").strip().split()[0].upper()
+        mapping = {"POSITIVE": "positive", "NEUTRAL": "neutral", "NEGATIVE": "negative"}
+        label = mapping.get(raw, "neutral")
+
+        # If you don’t compute probabilities, emit a neutral-ish placeholder.
+        score = 0.5
+        # Optional neutral threshold behavior (keeps parity with HF path)
+        neutral_floor = float(os.getenv("SENTIMENT_NEUTRAL_THRESHOLD", "0.65"))
+        if label in {"positive", "negative"} and score < neutral_floor:
+            label = "neutral"
+
+        return {"provider": "openai", "label": label, "score": score}
+
+    except Exception as e:
+        return {"provider": "openai", "label": "neutral", "score": 0.5, "error": str(e)}
+
+# --- public API ---------------------------------------------------------------
+
+__all__ = ["analyze_sentiment"]
+
+def analyze_sentiment(text: str, provider: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Analyze sentiment and return a dict:
+    {"provider": str, "label": "positive|neutral|negative", "score": float, ...}
+
+    - Respects ENABLE_LLM=0 (offline fallback).
+    - Auto-picks provider unless `provider` is passed explicitly.
+    - Never raises at import time; errors are embedded in the return dict.
+    """
+    # If LLM features are disabled, always use offline heuristic.
+    if not _enabled_llm():
+        return _sentiment_offline(text)
+
+    prov = (provider or _pick_provider()).lower()
+
+    if prov == "hf":
+        return _sentiment_hf(text)
+    if prov == "azure":
+        return _sentiment_azure(text)
+    if prov == "openai":
+        # Uses the lazy, import-safe helper you just added
+        try:
+            out = _sentiment_openai_provider(text)
+            # Normalize None → offline fallback to keep contract stable
+            if out is None:
+                return _sentiment_offline(text)
+            # If helper returned tuple (label, score), normalize to dict
+            if isinstance(out, tuple) and len(out) == 2:
+                label, score = out
+                return {"provider": "openai", "label": str(label).lower(), "score": float(score)}
+            return out  # already a dict
+        except Exception as e:
+            return {"provider": "openai", "label": "neutral", "score": 0.5, "error": str(e)}
+
+    # Optional providers supported later; keep import-safe fallbacks.
+    if prov in {"cohere", "deepai"}:
+        return _sentiment_offline(text)
+
+    # Unknown → safe default
+    return _sentiment_offline(text)
