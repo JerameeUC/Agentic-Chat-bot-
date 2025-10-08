@@ -97,7 +97,8 @@ C:\Users\User\Agentic-Chat-bot-
 │   ├── .profiles
 │   ├── rag
 │   │   ├── data
-│   │   │   └── indexer.py
+│   │   │   ├── indexer.py
+│   │   │   └── retriever.py
 │   │   ├── __init__.py
 │   │   ├── indexer.py
 │   │   └── retriever.py
@@ -143,6 +144,7 @@ C:\Users\User\Agentic-Chat-bot-
 ├── flat_tree_filter.py
 ├── FLATTENED_CODE.txt
 ├── LICENSE
+├── logged_in_bot.zip
 ├── Makefile
 ├── memory.zip
 ├── pyproject.toml
@@ -150,5 +152,6 @@ C:\Users\User\Agentic-Chat-bot-
 ├── requirements-dev.txt
 ├── requirements-ml.txt
 ├── requirements.txt
+├── samples.zip
 ├── tree.txt
 └── tree_filter.py

@@ -1,10 +1,10 @@
-# /logged_in_bot/tools.py
+# logged_in_bot/tools.py
 """
 Utilities for the logged-in chatbot flow.
 
 Features
 - PII redaction (optional) via guardrails.pii_redaction
-- Sentiment (optional Azure; falls back to local heuristic)
+- Sentiment (Azure via importlib if configured; falls back to heuristic)
 - Tiny intent router: help | remember | forget | list memory | summarize | echo | chat
 - Session history capture via memory.sessions
 - Lightweight RAG context via memory.rag.retriever (TF-IDF)
@@ -20,13 +20,6 @@ import re
 # -------------------------
 # Optional imports (safe)
 # -------------------------
-
-# Sentiment (Azure optional): falls back to a local heuristic if missing
-try:  # pragma: no cover
-    from .sentiment_azure import analyze_sentiment, SentimentResult  # type: ignore
-except Exception:  # pragma: no cover
-    analyze_sentiment = None  # type: ignore
-    SentimentResult = None  # type: ignore
 
 # Guardrails redaction (optional)
 try:  # pragma: no cover
@@ -45,6 +38,16 @@ except Exception:  # pragma: no cover
 
         def to_dict(self) -> Dict[str, Any]:
             return asdict(self)
+
+# Sentiment (unified; Azure if configured; otherwise heuristic)
+try:
+    from agenticcore.providers_unified import analyze_sentiment_unified as _sent
+except Exception:
+    def _sent(t: str) -> Dict[str, Any]:
+        t = (t or "").lower()
+        if any(w in t for w in ["love","great","awesome","good","thanks","glad","happy"]): return {"label":"positive","score":0.9,"backend":"heuristic"}
+        if any(w in t for w in ["hate","terrible","awful","bad","angry","sad"]):          return {"label":"negative","score":0.9,"backend":"heuristic"}
+        return {"label":"neutral","score":0.5,"backend":"heuristic"}
 
 # Memory + RAG (pure-Python, no extra deps)
 try:
@@ -67,6 +70,22 @@ except Exception as e:  # pragma: no cover
 History = List[Tuple[str, str]]  # [("user","..."), ("bot","...")]
 
 # -------------------------
+# Session store shim
+# -------------------------
+
+def _get_store():
+    """Some versions expose SessionStore.default(); others don’t. Provide a shim."""
+    try:
+        if hasattr(SessionStore, "default") and callable(getattr(SessionStore, "default")):
+            return SessionStore.default()
+    except Exception:
+        pass
+    # Fallback: module-level singleton
+    if not hasattr(_get_store, "_singleton"):
+        _get_store._singleton = SessionStore()
+    return _get_store._singleton
+
+# -------------------------
 # Helpers
 # -------------------------
 
@@ -76,7 +95,6 @@ def sanitize_text(text: str) -> str:
     """Basic sanitize/normalize; keep CPU-cheap & deterministic."""
     text = (text or "").strip()
     text = _WHITESPACE_RE.sub(" ", text)
-    # Optionally cap extremely large payloads to protect inference/services
     max_len = int(os.getenv("MAX_INPUT_CHARS", "4000"))
     if len(text) > max_len:
         text = text[:max_len] + "…"
@@ -88,12 +106,10 @@ def redact_text(text: str) -> str:
         try:
             return pii_redact(text)
         except Exception:
-            # Fail open but safe
             return text
     return text
 
 def _simple_sentiment(text: str) -> Dict[str, Any]:
-    """Local heuristic sentiment (when Azure is unavailable)."""
     t = (text or "").lower()
     pos = any(w in t for w in ["love", "great", "awesome", "good", "thanks", "glad", "happy"])
     neg = any(w in t for w in ["hate", "terrible", "awful", "bad", "angry", "sad"])
@@ -102,19 +118,15 @@ def _simple_sentiment(text: str) -> Dict[str, Any]:
     return {"label": label, "score": score, "backend": "heuristic"}
 
 def _sentiment_meta(text: str) -> Dict[str, Any]:
-    """Get a sentiment blob that is always safe to attach to meta."""
     try:
-        if analyze_sentiment:
-            res = analyze_sentiment(text)
-            # Expect res to have .label, .score, .backend; fall back to str
-            if hasattr(res, "__dict__"):
-                d = getattr(res, "__dict__")
-                label = d.get("label") or getattr(res, "label", None) or "neutral"
-                score = float(d.get("score") or getattr(res, "score", 0.5) or 0.5)
-                backend = d.get("backend") or getattr(res, "backend", "azure")
-                return {"label": label, "score": score, "backend": backend}
-            return {"label": str(res), "backend": "azure"}
-    except Exception:  # pragma: no cover
+        res = _sent(text)
+        # Normalize common shapes
+        if isinstance(res, dict):
+            label = str(res.get("label", "neutral"))
+            score = float(res.get("score", 0.5))
+            backend = str(res.get("backend", res.get("provider", "azure")))
+            return {"label": label, "score": score, "backend": backend}
+    except Exception:
         pass
     return _simple_sentiment(text)
 
@@ -138,10 +150,6 @@ def intent_of(text: str) -> str:
     return "chat"
 
 def summarize_text(text: str, target_len: int = 120) -> str:
-    """
-    CPU-cheap pseudo-summarizer:
-    - Extract first sentence; if long, truncate to target_len with ellipsis.
-    """
     m = re.split(r"(?<=[.!?])\s+", (text or "").strip())
     first = m[0] if m else (text or "").strip()
     if len(first) <= target_len:
@@ -160,7 +168,6 @@ def capabilities() -> List[str]:
     ]
 
 def _handle_memory_cmd(user_id: str, text: str) -> Optional[str]:
-    """Implements: remember k:v | forget k | list memory."""
     prof = Profile.load(user_id)
     m = re.match(r"^\s*remember\s+([^:]+)\s*:\s*(.+)$", text, flags=re.I)
     if m:
@@ -177,7 +184,6 @@ def _handle_memory_cmd(user_id: str, text: str) -> Optional[str]:
     return None
 
 def _retrieve_context(query: str, k: int = 4) -> List[str]:
-    """Pure TF-IDF passages (no extra deps)."""
     passages = retrieve(query, k=k, index_path=DEFAULT_INDEX_PATH, filters=None)
     return [p.text for p in passages]
 
@@ -235,7 +241,6 @@ def handle_logged_in_turn(message: str, history: Optional[History], user: Option
         return PlainChatResponse(reply=reply, meta=meta).to_dict()
 
     if it == "summarize":
-        # Use everything after the keyword if present
         if redacted_text.lower().startswith("summarize "):
             payload = redacted_text.split(" ", 1)[1]
         elif redacted_text.lower().startswith("summarise "):
@@ -255,6 +260,7 @@ def handle_logged_in_turn(message: str, history: Optional[History], user: Option
         )
     else:
         reply = "I don’t see anything relevant in your documents. Ask me to index files or try a different query."
+
     # session trace
     store = get_store()
     store.append_user(user_id, user_text)

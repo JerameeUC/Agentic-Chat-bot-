@@ -104,7 +104,13 @@ pytest -q
 
 ## Documentation
 
-- [Developer & Build/Test Guide](docs/Developer_Guide_Build_Test.md)
+- [Brief Academic Write Up](docs/Brief_Academic_Write_Up.md)
+- [README](../README.md)
+- [Architecture Overview](docs/architecture.md)  
+- [Design Notes](docs/design.md)  
+- [Implementation Notes](docs/storefront/IMPLEMENTATION.md) 
+- [Dev Doc](docs/DEV_DOC.md)
+- [Developer Guide Build Test](docs/Developer_Guide_Build_Test.md)
 
 ---
 

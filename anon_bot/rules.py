@@ -3,10 +3,14 @@
 Lightweight rule set for an anonymous chatbot.
 No external providers required. Pure-Python, deterministic.
 """
+"""Compatibility shim: expose `route` from rules_new for legacy imports."""
 
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
+from .rules_new import route  # noqa: F401
+
+__all__ = ["route"]
 
 # ---- Types ----
 History = List[Tuple[str, str]]  # e.g., [("user","hi"), ("bot","hello!")]
