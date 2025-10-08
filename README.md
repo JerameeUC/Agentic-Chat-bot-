@@ -1,4 +1,21 @@
 <!-- README.md -->
+---
+title: Agentic Chat Bot
+emoji: 👁
+colorFrom: gray
+colorTo: blue
+sdk: gradio
+sdk_version: 5.49.0
+app_file: app.py
+pinned: false
+license: mit
+short_description: Agentic Chat-bot with RAG, Memory, and Privacy
+---
+
+Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
+
+From the original GitHub:
+
 # Agentic Chatbot
 
 Agentic Chatbot with Retrieval-Augmented Generation (RAG), session memory, and privacy guardrails.  
