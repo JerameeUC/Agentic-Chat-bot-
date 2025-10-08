@@ -64,3 +64,6 @@ class Profile:
 
     def list_notes(self) -> List[str]:
         return sorted(self.notes.keys())
+    
+    def list_notes_dict(self) -> Dict[str, str]:
+        return {k: v.value for k, v in (self.notes or {}).items()}

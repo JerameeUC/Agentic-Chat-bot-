@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Production UI for Agentic Chat Bot - Following Flowchart Requirements
+DEV UI for Agentic Chat Bot - Following Flowchart Requirements
 
 This implementation follows the exact flowchart structure:
 1. Main Bot entry point
@@ -332,8 +332,8 @@ def create_flowchart_ui():
 
 def main():
     """Launch the flowchart-based production UI"""
-    print("🚀 Starting Flowchart-Based Production UI...")
-    
+    print("🚀 Starting Flowchart-Based DEV UI...")
+
     # Initialize app state
     success, msg = app_state.initialize()
     if success:

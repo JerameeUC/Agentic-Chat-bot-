@@ -66,11 +66,14 @@ curl -X POST http://127.0.0.1:3978/plain-chat   -H "Content-Type: application/js
 
 Provider integrations are selected automatically, or you can pin one with `AI_PROVIDER`. Supported keys:
 
+- **Google Gemini**: `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-1.5-flash` (recommended)
 - Hugging Face: `HF_API_KEY`, `HF_MODEL_SENTIMENT`
 - Azure: `MICROSOFT_AI_SERVICE_ENDPOINT`, `MICROSOFT_AI_API_KEY`
 - OpenAI: `OPENAI_API_KEY`
 - Cohere: `COHERE_API_KEY`
 - DeepAI: `DEEPAI_API_KEY`
+
+Get your Gemini API key from: https://aistudio.google.com/app/apikey
 
 If no keys are set, the system falls back to **offline sentiment mode**.
 

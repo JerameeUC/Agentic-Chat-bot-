@@ -123,9 +123,39 @@ class TfidfIndex:
         return hits[:k]
 
 # -------- convenience used by retriever/tests --------
+_index_cache = {}
+_index_mtime = {}
+
 def load_index(path: str | Path = DEFAULT_INDEX_PATH) -> TfidfIndex:
-    return TfidfIndex.load(path)
+    """Load index with simple file-based caching."""
+    path = Path(path)
+    path_str = str(path)
+    
+    # Check if file exists and get modification time
+    if path.exists():
+        current_mtime = path.stat().st_mtime
+        
+        # Return cached version if file hasn't changed
+        if (path_str in _index_cache and 
+            path_str in _index_mtime and 
+            _index_mtime[path_str] == current_mtime):
+            return _index_cache[path_str]
+        
+        # Load fresh index and cache it
+        idx = TfidfIndex.load(path)
+        _index_cache[path_str] = idx
+        _index_mtime[path_str] = current_mtime
+        return idx
+    else:
+        # No file exists, return empty index
+        return TfidfIndex()
 
 def search(query: str, k: int = 5, path: str | Path = DEFAULT_INDEX_PATH) -> List[DocHit]:
     idx = load_index(path)
     return idx.search(query, k=k)
+
+def clear_index_cache(path: str | Path = DEFAULT_INDEX_PATH) -> None:
+    """Clear the index cache for a specific path."""
+    path_str = str(Path(path))
+    _index_cache.pop(path_str, None)
+    _index_mtime.pop(path_str, None)

@@ -3,14 +3,15 @@
 providers_unified.py
 Unified, switchable providers for sentiment + (optional) text generation.
 Selection order unless AI_PROVIDER is set:
-  HF -> AZURE -> OPENAI -> COHERE -> DEEPAI -> OFFLINE
+  GEMINI -> HF -> AZURE -> OPENAI -> COHERE -> DEEPAI -> OFFLINE
 Env vars:
+  GEMINI_API_KEY, GEMINI_MODEL=gemini-1.5-flash
   HF_API_KEY
   MICROSOFT_AI_SERVICE_ENDPOINT, MICROSOFT_AI_API_KEY
   OPENAI_API_KEY,  OPENAI_MODEL=gpt-3.5-turbo
   COHERE_API_KEY,  COHERE_MODEL=command
   DEEPAI_API_KEY
-  AI_PROVIDER = hf|azure|openai|cohere|deepai|offline
+  AI_PROVIDER = gemini|hf|azure|openai|cohere|deepai|offline
   HTTP_TIMEOUT = 20
 """
 from __future__ import annotations
@@ -26,8 +27,9 @@ def _env(name: str, default: Optional[str] = None) -> Optional[str]:
 
 def _pick_provider() -> str:
     forced = _env("AI_PROVIDER")
-    if forced in {"hf", "azure", "openai", "cohere", "deepai", "offline"}:
+    if forced in {"hf", "azure", "openai", "cohere", "deepai", "gemini", "offline"}:
         return forced
+    if _env("GEMINI_API_KEY"): return "gemini"
     if _env("HF_API_KEY"): return "hf"
     if _env("MICROSOFT_AI_API_KEY") and _env("MICROSOFT_AI_SERVICE_ENDPOINT"): return "azure"
     if _env("OPENAI_API_KEY"): return "openai"
@@ -42,6 +44,7 @@ def _pick_provider() -> str:
 def analyze_sentiment(text: str) -> Dict[str, Any]:
     provider = _pick_provider()
     try:
+        if provider == "gemini":  return _sentiment_gemini_prompt(text)
         if provider == "hf":     return _sentiment_hf(text)
         if provider == "azure":  return _sentiment_azure(text)
         if provider == "openai": return _sentiment_openai_prompt(text)
@@ -204,10 +207,18 @@ def _sentiment_deepai(text: str) -> Dict[str, Any]:
 def generate_text(prompt: str, max_tokens: int = 128) -> Dict[str, Any]:
     provider = _pick_provider()
     try:
+        if provider == "gemini":  return _gen_gemini(prompt, max_tokens)
         if provider == "hf":     return _gen_hf(prompt, max_tokens)
         if provider == "openai": return _gen_openai(prompt, max_tokens)
         if provider == "cohere": return _gen_cohere(prompt, max_tokens)
         if provider == "deepai": return _gen_deepai(prompt, max_tokens)
+        # Try local LLM before falling back to offline
+        if _env("USE_LOCAL_LLM", "false").lower() == "true":
+            try:
+                from agenticcore.local_llm import generate_local
+                return generate_local(prompt, max_tokens)
+            except Exception:
+                pass
         return {"provider": "offline", "text": f"(offline) {prompt[:160]}"}
     except Exception as e:
         return {"provider": provider, "text": f"(error) {str(e)}"}
@@ -272,3 +283,46 @@ def _gen_deepai(prompt: str, max_tokens: int) -> Dict[str, Any]:
     r.raise_for_status()
     data = r.json()
     return {"provider": "deepai", "text": data.get("output", "")}
+
+def _sentiment_gemini_prompt(text: str) -> Dict[str, Any]:
+    key = _env("GEMINI_API_KEY")
+    model = _env("GEMINI_MODEL", "gemini-1.5-flash")
+    if not key: return _sentiment_offline(text)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    prompt = f"Classify sentiment as positive, negative, or neutral. Reply JSON with 'label' and 'score' keys. Text: {text!r}"
+    r = requests.post(
+        url,
+        headers={"Content-Type": "application/json"},
+        json={"contents": [{"parts": [{"text": prompt}]}]},
+        timeout=TIMEOUT,
+    )
+    r.raise_for_status()
+    data = r.json()
+    content = data["candidates"][0]["content"]["parts"][0]["text"]
+    try:
+        obj = json.loads(content)
+        label = str(obj.get("label", "neutral")).lower()
+        score = float(obj.get("score", 0.5))
+        return {"provider": "gemini", "label": label, "score": score}
+    except Exception:
+        l = "positive" if "positive" in content.lower() else "negative" if "negative" in content.lower() else "neutral"
+        return {"provider": "gemini", "label": l, "score": 0.5}
+
+def _gen_gemini(prompt: str, max_tokens: int) -> Dict[str, Any]:
+    key = _env("GEMINI_API_KEY")
+    model = _env("GEMINI_MODEL", "gemini-1.5-flash")
+    if not key: return {"provider": "offline", "text": f"(offline) {prompt[:160]}"}
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    r = requests.post(
+        url,
+        headers={"Content-Type": "application/json"},
+        json={
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"maxOutputTokens": max_tokens}
+        },
+        timeout=TIMEOUT,
+    )
+    r.raise_for_status()
+    data = r.json()
+    text = data["candidates"][0]["content"]["parts"][0]["text"]
+    return {"provider": "gemini", "text": text}
