@@ -1,0 +1,34 @@
+# Graduation Storefront & Venue Info (Seed Content)
+
+## Items for Sale
+- Cap (black mortarboard) — one size, tassel included.
+- Gown (black) — sized by height range.
+- Parking Pass — day-of-event pass; multiple passes allowed.
+
+## Purchasing Notes
+- Parking passes may be purchased separately from cap/gown.
+- Multiple parking passes are allowed for extended families.
+- Pickup for cap/gown occurs at the venue; bring student ID.
+- Parking pass delivery is via email (PDF with QR code).
+
+## Parking Rules
+1) No double parking.
+2) Vehicles parked in handicap will be towed.
+
+## Venue Rules
+- Formal attire recommended (not required).
+- No muscle shirts.
+- No sagging pants.
+
+## Common Questions
+Q: Can I buy more than one parking pass?
+A: Yes. Multiple passes are allowed per student.
+
+Q: Do I have to buy a parking pass with the cap and gown?
+A: No. Parking passes can be bought separately.
+
+Q: How do I receive the parking pass?
+A: You will receive a PDF with a QR code by email. Show it at the entrance.
+
+Q: What should I wear?
+A: Formal attire is recommended but not required. No muscle shirts and no sagging pants.

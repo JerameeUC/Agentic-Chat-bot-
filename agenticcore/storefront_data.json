@@ -1,0 +1,114 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "generated_at": "2025-10-10T18:55:37.755114Z",
+    "source": "Agentic Chat Bot storefront seed"
+  },
+  "products": [
+    {
+      "sku": "GRAD-CAP-001",
+      "name": "Graduation Cap",
+      "category": "Apparel",
+      "price_usd": 19.99,
+      "description": "Classic black mortarboard with 2025 tassel. One size fits most.",
+      "variants": [
+        {
+          "size": "One Size",
+          "color": "Black"
+        }
+      ],
+      "inventory_policy": {
+        "allow_backorder": false
+      },
+      "eligibility": {
+        "student_only": true
+      },
+      "shipping": {
+        "method": "Pickup at venue",
+        "notes": "Bring student ID to collect."
+      }
+    },
+    {
+      "sku": "GRAD-GOWN-001",
+      "name": "Graduation Gown",
+      "category": "Apparel",
+      "price_usd": 39.99,
+      "description": "Lightweight black gown sized by height range. Includes zipper front.",
+      "variants": [
+        {
+          "size": "XS (4'8\"\u20135'1\")"
+        },
+        {
+          "size": "S (5'1\"\u20135'4\")"
+        },
+        {
+          "size": "M (5'4\"\u20135'7\")"
+        },
+        {
+          "size": "L (5'7\"\u20135'10\")"
+        },
+        {
+          "size": "XL (5'10\"\u20136'2\")"
+        },
+        {
+          "size": "XXL (6'2\"+)"
+        }
+      ],
+      "inventory_policy": {
+        "allow_backorder": false
+      },
+      "eligibility": {
+        "student_only": true
+      },
+      "shipping": {
+        "method": "Pickup at venue",
+        "notes": "Try on at pickup if needed."
+      }
+    },
+    {
+      "sku": "GRAD-PARK-001",
+      "name": "Graduation Parking Pass",
+      "category": "Parking",
+      "price_usd": 10.0,
+      "description": "One-day parking pass for graduation day. Multiple passes allowed per student.",
+      "rules": {
+        "multiple_allowed": true,
+        "max_per_student": null,
+        "sold_separately": true
+      },
+      "delivery": {
+        "method": "Email PDF + QR",
+        "notes": "Show QR at entrance."
+      }
+    }
+  ],
+  "policies": {
+    "parking_rules": [
+      "No double parking.",
+      "Vehicles parked in handicap will be towed."
+    ],
+    "venue_rules": [
+      "Formal attire recommended but not required.",
+      "No muscle shirts.",
+      "No sagging pants."
+    ]
+  },
+  "faq": [
+    {
+      "q": "Can I buy more than one parking pass?",
+      "a": "Yes. Multiple parking passes are allowed per student to accommodate larger families."
+    },
+    {
+      "q": "Do I have to buy the parking pass with cap and gown?",
+      "a": "No. Parking passes can be purchased separately."
+    },
+    {
+      "q": "How do I receive the parking pass?",
+      "a": "A PDF with a QR code will be emailed to you. Show the QR at the entrance."
+    },
+    {
+      "q": "What should I wear to the ceremony?",
+      "a": "Formal attire is recommended but not required. No muscle shirts and no sagging pants."
+    }
+  ]
+}

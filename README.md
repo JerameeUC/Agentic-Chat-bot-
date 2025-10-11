@@ -1,15 +1,12 @@
-<!-- README.md -->
 ---
-title: Agentic Chat Bot
-emoji: 👁
-colorFrom: gray
+title: Agentic-Chat-bot
+emoji: 💬
+colorFrom: indigo
 colorTo: blue
 sdk: gradio
-sdk_version: 5.49.0
-app_file: app.py
+sdk_version: "4.38.0"
+app_file: space_app.py
 pinned: false
-license: mit
-short_description: Agentic Chat-bot with RAG, Memory, and Privacy
 ---
 
 Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
@@ -26,7 +23,6 @@ The project follows a **modular architecture** with:
 - Guardrails for safety and PII redaction
 - Optional cloud providers (Azure, Hugging Face, OpenAI, Cohere, DeepAI)
 
----
 
 ## Quickstart
 
