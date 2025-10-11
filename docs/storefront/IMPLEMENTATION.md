@@ -24,3 +24,16 @@ Documents enable FAQs such as:
 - Can I buy more than one parking pass? → **Yes**.
 - Is formal attire required? → **Recommended, not required**.
 - What parking rules apply? → **No double parking; handicap violators towed**.
+
+## Documentation
+
+- [Brief Academic Write Up](../Brief_Academic_Write_Up.md)
+- [README](../../README.md)
+- [Architecture Overview](../architecture.md)  
+- [Design Notes](../design.md) 
+- [Developer & Build/Test Guide](../Developer_Guide_Build_Test.md) 
+- [Implementation Notes](storefront/IMPLEMENTATION.md) 
+- [Dev Doc](../DEV_DOC.md)  
+
+---
+*Prepared for inclusion in the GitHub repository to 
