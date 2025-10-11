@@ -1,0 +1,84 @@
+{
+  "products": [
+    {
+      "sku": "CG-SET",
+      "name": "Cap & Gown Set",
+      "price_usd": 59.0,
+      "description": "Tassel included; ships until 10 days before the event. Sizes available at pickup; exchange allowed on-site if inventory permits."
+    },
+    {
+      "sku": "PK-1",
+      "name": "Parking Pass",
+      "price_usd": 10.0,
+      "description": "One vehicle per pass. Multiple passes are allowed per student for extended family or guests."
+    }
+  ],
+  "policies": {
+    "parking_rules": [
+      "No double parking.",
+      "Vehicles parked in handicap spaces will be towed."
+    ],
+    "venue_rules": [
+      "Formal attire is recommended (not required).",
+      "No muscle shirts.",
+      "No sagging pants."
+    ]
+  },
+  "logistics": {
+    "shipping_cutoff_days": 10,
+    "shipping_window_business_days": "3–5",
+    "pickup_location": "Student Center Bookstore",
+    "arrival_times": {
+      "graduates_minutes_early": 90,
+      "guests_minutes_early": 60
+    },
+    "lots_open_hours_before": 2,
+    "lots": ["A", "B"],
+    "overflow": "As needed"
+  },
+  "faq": [
+    {
+      "q": [
+        "Can I buy multiple parking passes?",
+        "multiple passes",
+        "more than one parking pass",
+        "extra parking pass"
+      ],
+      "a": "Yes, multiple parking passes are allowed per student."
+    },
+    {
+      "q": [
+        "What time do the parking lots open?",
+        "When do lots open",
+        "parking hours",
+        "what time parking"
+      ],
+      "a": "Parking lots open 2 hours before the ceremony."
+    },
+    {
+      "q": [
+        "Is formal attire required?",
+        "dress code",
+        "what should I wear",
+        "attire rules"
+      ],
+      "a": "Formal attire is recommended but not required. No muscle shirts or sagging pants."
+    },
+    {
+      "q": [
+        "Where do I pick up the gown?",
+        "gown pickup",
+        "pickup location"
+      ],
+      "a": "Pickup is at the Student Center Bookstore during the week prior to the event."
+    },
+    {
+      "q": [
+        "Shipping cutoff",
+        "last day to ship",
+        "when is shipping available until"
+      ],
+      "a": "Shipping is available until 10 days before the event. Typical shipping takes 3–5 business days."
+    }
+  ]
+}

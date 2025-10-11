@@ -1,17 +1,17 @@
 ---
-title: Agentic-Chat-bot
+title: Store Front Agentic Chat Bot
 emoji: 💬
 colorFrom: indigo
 colorTo: blue
 sdk: gradio
 sdk_version: "4.38.0"
-app_file: space_app.py
+app_file: app_storefront.py
 pinned: false
+license: mit
+short_description: Test for the project front-end.
 ---
 
 Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
-
-From the original GitHub:
 
 # Agentic Chatbot
 

@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Storefront Chat • Cap & Gown + Parking</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <style>
+    :root {
+      --bg: #0b0d12;
+      --panel: #0f172a;
+      --panel-2: #111827;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #60a5fa;
+      --border: #1f2940;
+      --danger: #ef4444;
+      --success: #22c55e;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --err: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); }
+    .wrap { max-width: 1100px; margin: 28px auto; padding: 0 16px; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
+    header h1 { font-size:18px; margin:0; letter-spacing:.25px; }
+    header .badge { font-size:12px; opacity:.9; padding:4px 8px; border:1px solid var(--border); border-radius:999px; background: rgba(255,255,255,.04); }
+    .grid { display: grid; gap: 12px; }
+    .grid-2 { grid-template-columns: 3fr 2fr; }
+    .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .card { background: var(--panel); border:1px solid var(--border); border-radius:16px; padding:16px; }
+    .row { display:flex; gap:8px; align-items:center; }
+    .stack { display:grid; gap:10px; }
+    label { font-size:12px; color: var(--muted); }
+    input[type=text] { flex:1; padding:12px 14px; border-radius:12px; border:1px solid var(--border); background: var(--panel-2); color: var(--text); outline:none; }
+    input[type=text]::placeholder { color:#6b7280; }
+    button { padding:10px 14px; border-radius:12px; border:1px solid var(--border); background:#1f2937; color: var(--text); cursor:pointer; transition: transform .02s ease, background .2s; }
+    button:hover { background:#273449; }
+    button:active { transform: translateY(1px); }
+    .btn-ghost { background: transparent; border-color: var(--border); }
+    .small { font-size:12px; }
+    .status { display:flex; align-items:center; gap:8px; font-size:12px; color: var(--muted); }
+    .dot { width:8px; height:8px; border-radius:999px; background:#64748b; display:inline-block; }
+    .dot.ok { background: var(--ok); }
+    .dot.bad { background: var(--err); }
+    .log { margin-top: 8px; display:grid; gap:10px; height: 360px; overflow:auto; background: #0b1325; border:1px solid #1b2540; border-radius:12px; padding:10px; }
+    .bubble { max-width:80%; padding:12px 14px; border-radius:14px; line-height:1.35; white-space:pre-wrap; word-break:break-word; }
+    .user { background:#1e293b; border:1px solid #2b3b55; margin-left:auto; border-bottom-right-radius:4px; }
+    .bot  { background:#0d1b2a; border:1px solid #223049; margin-right:auto; border-bottom-left-radius:4px; }
+    .meta { font-size:12px; color: var(--muted); }
+    .chips { display:flex; flex-wrap: wrap; gap:8px; }
+    .chip { font-size:12px; padding:6px 10px; border-radius:999px; border:1px solid var(--border); background: rgba(255,255,255,.035); cursor:pointer; }
+    .panel-title { font-size:13px; color: var(--muted); margin: 0 0 6px 0; }
+    table { width:100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid #1e2a45; }
+    th { text-align: left; color: var(--muted); font-weight:600; }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .err { color: var(--err); }
+    footer { margin: 22px 0; text-align:center; color: var(--muted); font-size:12px; }
+    @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Storefront Chat • Cap & Gown + Parking</h1>
+      <div class="badge">Frontend → /chatbot/message → RAG</div>
+    </header>
+
+    <!-- Controls + Chat -->
+    <section class="grid grid-2">
+      <div class="card stack">
+        <div class="grid" style="grid-template-columns: 1fr auto auto auto;">
+          <div class="row">
+            <label class="small" for="backend" style="margin-right:8px;">Backend</label>
+            <input id="backend" type="text" placeholder="http://127.0.0.1:8000" />
+          </div>
+          <button id="save" class="btn-ghost small">Save</button>
+          <button id="btnHealth" class="btn-ghost small">Health</button>
+          <button id="btnCaps" class="btn-ghost small">Capabilities</button>
+        </div>
+        <div class="status" id="status"><span class="dot"></span><span>Not checked</span></div>
+
+        <div class="row">
+          <input id="message" type="text" placeholder="Ask about cap & gown sizes, parking rules, refunds, etc…" />
+          <button id="send">Send</button>
+        </div>
+
+        <div class="chips" id="quick">
+          <div class="chip" data-msg="What are the parking rules?">Parking rules</div>
+          <div class="chip" data-msg="Can I buy multiple parking passes?">Multiple passes</div>
+          <div class="chip" data-msg="Is formal attire required?">Attire</div>
+          <div class="chip" data-msg="How do I pick a cap & gown size?">Sizing</div>
+          <div class="chip" data-msg="What is the refund policy?">Refunds</div>
+          <div class="chip" data-msg="When is the shipping cutoff for cap & gown?">Shipping cutoff</div>
+        </div>
+
+        <div class="log" id="log"></div>
+      </div>
+
+      <div class="grid">
+        <!-- Products / Rules / Logistics Panels -->
+        <div class="card">
+          <p class="panel-title">Products</p>
+          <table>
+            <thead><tr><th>SKU</th><th>Name</th><th>Price</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td>CG-SET</td><td>Cap &amp; Gown Set</td><td>$59</td><td>Tassel included; ship until 10 days before event</td></tr>
+              <tr><td>PK-1</td><td>Parking Pass</td><td>$10</td><td>Multiple passes allowed per student</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <p class="panel-title">Rules (Venue &amp; Parking)</p>
+          <ul style="margin:0 0 8px 16px;">
+            <li>Formal attire recommended (not required)</li>
+            <li>No muscle shirts; no sagging pants</li>
+            <li>No double parking</li>
+            <li>Vehicles parked in handicap spaces will be towed</li>
+          </ul>
+          <p class="meta">These are reinforced by on-site attendants and signage.</p>
+        </div>
+
+        <div class="card">
+          <p class="panel-title">Logistics</p>
+          <ul style="margin:0 0 8px 16px;">
+            <li>Shipping: available until 10 days before event (typ. 3–5 business days)</li>
+            <li>Pickup: Student Center Bookstore during week prior to event</li>
+            <li>Graduates arrive 90 minutes early; guests 60 minutes early</li>
+            <li>Lots A &amp; B open 2 hours before; Overflow as needed</li>
+          </ul>
+          <p class="meta">Ask the bot: “What time should I arrive?” or “Where do I pick up the gown?”</p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      Works with your FastAPI backend at <code>/chatbot/message</code>. Configure CORS if serving this file from a different origin.
+    </footer>
+  </div>
+
+  <script>
+    // --- Utilities & State ---
+    const $ = (sel) => document.querySelector(sel);
+    const backendInput = $('#backend');
+    const sendBtn = $('#send');
+    const saveBtn = $('#save');
+    const msgInput = $('#message');
+    const healthBtn = $('#btnHealth');
+    const capsBtn = $('#btnCaps');
+    const quick = $('#quick');
+    const log = $('#log');
+    const status = $('#status');
+    const dot = status.querySelector('.dot');
+    const statusText = status.querySelector('span:last-child');
+
+    function getBackendUrl() { return localStorage.getItem('BACKEND_URL') || 'http://127.0.0.1:8000'; }
+    function setBackendUrl(v) { localStorage.setItem('BACKEND_URL', v); }
+    function setStatus(ok, text) {
+      dot.classList.toggle('ok', ok === true);
+      dot.classList.toggle('bad', ok === false);
+      statusText.textContent = text || (ok ? 'OK' : (ok === false ? 'Error' : 'Idle'));
+    }
+    function cardUser(text) {
+      const div = document.createElement('div'); div.className = 'bubble user'; div.textContent = text; log.appendChild(div); log.scrollTop = log.scrollHeight;
+    }
+    function cardBot(obj) {
+      const div = document.createElement('div'); div.className = 'bubble bot';
+      const pre = document.createElement('pre'); pre.textContent = (typeof obj === 'string') ? obj : JSON.stringify(obj, null, 2);
+      div.appendChild(pre); log.appendChild(div); log.scrollTop = log.scrollHeight;
+    }
+    function join(base, path){ return base.replace(/\/+$/, '') + path; }
+
+    async function api(path, init) {
+      const base = backendInput.value.trim().replace(/\/$/, '');
+      const url = join(base, path);
+      const resp = await fetch(url, init);
+      if(!resp.ok){
+        const t = await resp.text().catch(()=> '');
+        throw new Error(`HTTP ${resp.status} ${resp.statusText} — ${t}`);
+      }
+      const ct = resp.headers.get('content-type') || '';
+      if(ct.includes('application/json')) return resp.json();
+      return resp.text();
+    }
+
+    // --- Actions ---
+    async function checkHealth(){
+      try {
+        const h = await api('/health', { method: 'GET' });
+        setStatus(true, 'Healthy');
+        cardBot({ health: h });
+      } catch(e) {
+        setStatus(false, String(e.message||e));
+        cardBot({ error: String(e.message||e) });
+      }
+    }
+
+    async function showCaps(){
+      try {
+        // Fall back to showing available OpenAPI paths if caps/help not implemented
+        const j = await api('/openapi.json', { method:'GET' });
+        cardBot({ paths: Object.keys(j.paths).slice(0, 40) });
+      } catch(e) {
+        // Or try calling a help message through the chatbot
+        try {
+          const data = await api('/chatbot/message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: 'help' })
+          });
+          cardBot(data);
+        } catch(e2){
+          cardBot({ capabilities: ['text-input','retrieval','faq'], note: 'Falling back to default caps', error: String(e2.message||e2) });
+        }
+      }
+    }
+
+    async function sendMessage(){
+      const text = msgInput.value.trim(); if(!text) return;
+      cardUser(text); msgInput.value = '';
+      try {
+        const data = await api('/chatbot/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text })
+        });
+        cardBot(data);
+      } catch(e){ cardBot({ error: String(e.message||e) }); }
+    }
+
+    // Quick chips → prefill common storefront questions
+    quick.addEventListener('click', (ev)=>{
+      const t = ev.target.closest('.chip'); if(!t) return;
+      msgInput.value = t.getAttribute('data-msg') || '';
+      msgInput.focus();
+    });
+
+    // Wire up
+    backendInput.value = getBackendUrl();
+    saveBtn.onclick = () => { setBackendUrl(backendInput.value.trim()); setStatus(null, 'Saved'); };
+    sendBtn.onclick = sendMessage;
+    msgInput.addEventListener('keydown', (ev)=>{ if(ev.key === 'Enter') sendMessage(); });
+    healthBtn.onclick = checkHealth;
+    capsBtn.onclick = showCaps;
+
+    // Initial ping
+    checkHealth();
+  </script>
+</body>
+</html>
