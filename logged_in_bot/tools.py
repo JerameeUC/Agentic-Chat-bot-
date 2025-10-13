@@ -51,7 +51,7 @@ except Exception:
 
 # Memory + RAG (pure-Python, no extra deps)
 try:
-    from memory.sessions import SessionStore
+    from memory.sessions import SessionStore, get_store
 except Exception as e:  # pragma: no cover
     raise RuntimeError("memory.sessions is required for logged_in_bot.tools") from e
 
@@ -228,9 +228,9 @@ def handle_logged_in_turn(message: str, history: Optional[History], user: Option
         mem_reply = _handle_memory_cmd(user_id, redacted_text)
         reply = mem_reply or "Sorry, I didn't understand that memory command."
         # track in session
-        sess = _get_store().get(user_id)
-        sess.append({"role": "user", "text": user_text})
-        sess.append({"role": "assistant", "text": reply})
+        store = get_store()
+        store.append_user(user_id, user_text)
+        store.append_bot(user_id, reply)
         meta = _meta(redacted, "memory_cmd", redacted_text, sentiment)
         return PlainChatResponse(reply=reply, meta=meta).to_dict()
 
@@ -262,9 +262,9 @@ def handle_logged_in_turn(message: str, history: Optional[History], user: Option
         reply = "I don’t see anything relevant in your documents. Ask me to index files or try a different query."
 
     # session trace
-    sess = _get_store().get(user_id)
-    sess.append({"role": "user", "text": user_text})
-    sess.append({"role": "assistant", "text": reply})
+    store = get_store()
+    store.append_user(user_id, user_text)
+    store.append_bot(user_id, reply)
 
     meta = _meta(redacted, it, redacted_text, sentiment)
     return PlainChatResponse(reply=reply, meta=meta).to_dict()
